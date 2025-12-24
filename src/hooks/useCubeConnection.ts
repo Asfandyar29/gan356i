@@ -8,43 +8,37 @@ import {
   CubeFace,
   Facelets 
 } from '@/types/cube';
+import { GanCubeDecoder, parseV2Data } from '@/lib/ganCrypto';
 
-// GAN Cube Bluetooth UUIDs - From official gan-web-bluetooth library
-// Gen2 protocol (GAN356 i, GAN356 i Carry, GAN356 i3, etc.)
-const GAN_GEN2_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dc4179';
-const GAN_GEN2_COMMAND_CHARACTERISTIC = '28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4';
-const GAN_GEN2_STATE_CHARACTERISTIC = '28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4';
-
-// Gen3 protocol (GAN356 i Carry 2)
-const GAN_GEN3_SERVICE = '8653000a-43e6-47b7-9cb0-5fc21d4ae340';
-const GAN_GEN3_COMMAND_CHARACTERISTIC = '8653000c-43e6-47b7-9cb0-5fc21d4ae340';
-const GAN_GEN3_STATE_CHARACTERISTIC = '8653000b-43e6-47b7-9cb0-5fc21d4ae340';
-
-// Gen4 protocol (newer models like GAN12 ui Maglev)
-const GAN_GEN4_SERVICE = '00000010-0000-fff7-fff6-fff5fff4fff0';
-const GAN_GEN4_COMMAND_CHARACTERISTIC = '0000fff5-0000-1000-8000-00805f9b34fb';
-const GAN_GEN4_STATE_CHARACTERISTIC = '0000fff6-0000-1000-8000-00805f9b34fb';
-
-// Legacy service UUID (older cubes)
-const GAN_LEGACY_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
-const GAN_LEGACY_STATE_CHARACTERISTIC = '0000fff6-0000-1000-8000-00805f9b34fb';
-const GAN_LEGACY_COMMAND_CHARACTERISTIC = '0000fff5-0000-1000-8000-00805f9b34fb';
+// GAN Cube Bluetooth UUIDs - V2 protocol (GAN356 i, GAN356 i Carry, GAN356 i3, etc.)
+const GAN_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dc4179';
+const GAN_WRITE_CHARACTERISTIC = '28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4';
+const GAN_READ_CHARACTERISTIC = '28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4';
 
 interface UseCubeConnectionReturn {
   connectionState: ConnectionState;
   cubeState: CubeState;
-  connect: () => Promise<void>;
+  connect: (macAddress?: string) => Promise<void>;
   disconnect: () => void;
   resetCube: () => void;
   syncCube: () => void;
   error: string | null;
   deviceName: string | null;
+  macAddress: string | null;
+  setMacAddress: (mac: string) => void;
 }
 
 export const useCubeConnection = (): UseCubeConnectionReturn => {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [macAddress, setMacAddressState] = useState<string | null>(() => {
+    // Try to load saved MAC address
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ganCubeMac') || null;
+    }
+    return null;
+  });
   const [cubeState, setCubeState] = useState<CubeState>({
     facelets: createSolvedCube(),
     orientation: { x: 0, y: 0, z: 0 },
@@ -56,8 +50,10 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const deviceRef = useRef<BluetoothDevice | null>(null);
   const characteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const writeCharacteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
+  const decoderRef = useRef<GanCubeDecoder>(new GanCubeDecoder());
+  const prevMoveCntRef = useRef<number>(-1);
   
-  // Gyro smoothing state - all useRefs must be declared together at top
+  // Gyro smoothing state
   const gyroAccumulator = useRef({ x: 0, y: 0, z: 0 });
   const smoothedGyro = useRef({ x: 0, y: 0, z: 0 });
   const lastGyroUpdate = useRef(Date.now());
@@ -65,72 +61,11 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   // Face index mapping for GAN cubes
   const faceMap: CubeFace[] = ['U', 'R', 'F', 'D', 'L', 'B'];
 
-  // Parse move data from GAN cube
-  const parseMove = useCallback((data: DataView): MoveEvent | null => {
-    try {
-      // GAN cubes typically send move data in a specific format
-      // The first few bytes indicate the move
-      const moveIndex = data.getUint8(0);
-      const face = faceMap[moveIndex % 6] || 'U';
-      const direction = (moveIndex < 6) ? 1 : -1;
-      const modifier = direction === -1 ? "'" : '';
-      
-      return {
-        face,
-        direction: direction as 1 | -1,
-        notation: `${face}${modifier}`,
-        timestamp: Date.now(),
-      };
-    } catch {
-      return null;
-    }
-  }, []);
-  
-  // Parse orientation data (gyroscope) - V2 protocol
-  // GAN cubes send gyro as 8-bit signed values (-128 to 127) at offsets 1,2,3 after message type
-  const parseGyroData = useCallback((data: number[]): CubeOrientation | null => {
-    try {
-      // Message type 1 = gyro data in V2 protocol
-      // Values are signed bytes representing angular velocity, not absolute angles
-      const rawX = data[1] > 127 ? data[1] - 256 : data[1];
-      const rawY = data[2] > 127 ? data[2] - 256 : data[2];
-      const rawZ = data[3] > 127 ? data[3] - 256 : data[3];
-      
-      // Apply deadzone to filter noise (cube is stationary if values are small)
-      const DEADZONE = 5;
-      const x = Math.abs(rawX) < DEADZONE ? 0 : rawX;
-      const y = Math.abs(rawY) < DEADZONE ? 0 : rawY;
-      const z = Math.abs(rawZ) < DEADZONE ? 0 : rawZ;
-      
-      // If all values are in deadzone, no significant movement
-      if (x === 0 && y === 0 && z === 0) {
-        return null;
-      }
-      
-      // Calculate time delta for integration
-      const now = Date.now();
-      const dt = Math.min((now - lastGyroUpdate.current) / 1000, 0.1); // Cap at 100ms
-      lastGyroUpdate.current = now;
-      
-      // Integrate angular velocity to get angle change (scale factor tuned for GAN cubes)
-      const SCALE = 0.5;
-      gyroAccumulator.current.x += x * dt * SCALE;
-      gyroAccumulator.current.y += y * dt * SCALE;
-      gyroAccumulator.current.z += z * dt * SCALE;
-      
-      // Apply low-pass filter for smooth movement
-      const SMOOTHING = 0.15;
-      smoothedGyro.current.x += (gyroAccumulator.current.x - smoothedGyro.current.x) * SMOOTHING;
-      smoothedGyro.current.y += (gyroAccumulator.current.y - smoothedGyro.current.y) * SMOOTHING;
-      smoothedGyro.current.z += (gyroAccumulator.current.z - smoothedGyro.current.z) * SMOOTHING;
-      
-      return {
-        x: smoothedGyro.current.x,
-        y: smoothedGyro.current.y,
-        z: smoothedGyro.current.z,
-      };
-    } catch {
-      return null;
+  // Set MAC address and save to localStorage
+  const setMacAddress = useCallback((mac: string) => {
+    setMacAddressState(mac);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ganCubeMac', mac);
     }
   }, []);
 
@@ -152,70 +87,144 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     for (let i = 0; i < 9; i++) {
       newFacelets[offset + i] = rotatedFace[i];
     }
-
-    // Rotate adjacent edges (simplified - full implementation would be more complex)
-    // This is a placeholder - proper cube state tracking requires full permutation tables
     
     return newFacelets;
   }, []);
 
-  // Handle incoming data from the cube (V2 protocol)
+  // Process gyro data with smoothing
+  const processGyroData = useCallback((rawX: number, rawY: number, rawZ: number): CubeOrientation | null => {
+    // Apply deadzone to filter noise
+    const DEADZONE = 8;
+    const x = Math.abs(rawX) < DEADZONE ? 0 : rawX;
+    const y = Math.abs(rawY) < DEADZONE ? 0 : rawY;
+    const z = Math.abs(rawZ) < DEADZONE ? 0 : rawZ;
+    
+    // If all values are in deadzone, no significant movement
+    if (x === 0 && y === 0 && z === 0) {
+      return null;
+    }
+    
+    // Calculate time delta for integration
+    const now = Date.now();
+    const dt = Math.min((now - lastGyroUpdate.current) / 1000, 0.1);
+    lastGyroUpdate.current = now;
+    
+    // Integrate angular velocity
+    const SCALE = 0.3;
+    gyroAccumulator.current.x += x * dt * SCALE;
+    gyroAccumulator.current.y += y * dt * SCALE;
+    gyroAccumulator.current.z += z * dt * SCALE;
+    
+    // Apply low-pass filter
+    const SMOOTHING = 0.12;
+    smoothedGyro.current.x += (gyroAccumulator.current.x - smoothedGyro.current.x) * SMOOTHING;
+    smoothedGyro.current.y += (gyroAccumulator.current.y - smoothedGyro.current.y) * SMOOTHING;
+    smoothedGyro.current.z += (gyroAccumulator.current.z - smoothedGyro.current.z) * SMOOTHING;
+    
+    return {
+      x: smoothedGyro.current.x,
+      y: smoothedGyro.current.y,
+      z: smoothedGyro.current.z,
+    };
+  }, []);
+
+  // Handle incoming data from the cube
   const handleCharacteristicChange = useCallback((event: Event) => {
     const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
     const value = characteristic.value;
     if (!value) return;
 
-    // Convert to byte array for V2 protocol parsing
-    const bytes: number[] = [];
-    for (let i = 0; i < value.byteLength; i++) {
-      bytes[i] = value.getUint8(i);
-    }
+    // Decrypt the data
+    const decryptedBytes = decoderRef.current.decode(value);
     
-    // V2 protocol message type is in first 4 bits of first byte
-    const messageType = bytes[0] >> 4;
+    // Parse V2 protocol data
+    const parsed = parseV2Data(decryptedBytes, prevMoveCntRef.current);
     
-    // Message type 1 = Gyro data
-    if (messageType === 1) {
-      const orientation = parseGyroData(bytes);
+    if (parsed.type === 1 && parsed.gyro) {
+      // Gyro data
+      const orientation = processGyroData(parsed.gyro.x, parsed.gyro.y, parsed.gyro.z);
       if (orientation) {
         setCubeState(prev => ({
           ...prev,
           orientation,
         }));
       }
-      return;
-    }
-    
-    // Message type 2 = Move data
-    if (messageType === 2) {
-      const data = new DataView(value.buffer);
-      const move = parseMove(data);
-      if (move) {
+    } else if (parsed.type === 2 && parsed.moves && parsed.moves.length > 0) {
+      // Move data
+      if (parsed.moveCount !== undefined) {
+        prevMoveCntRef.current = parsed.moveCount;
+      }
+      
+      // Process the most recent move
+      const latestMove = parsed.moves[0];
+      if (latestMove) {
+        const face = latestMove.move.charAt(0) as CubeFace;
+        const isPrime = latestMove.move.includes("'");
+        
+        const moveEvent: MoveEvent = {
+          face,
+          direction: isPrime ? -1 : 1,
+          notation: latestMove.move,
+          timestamp: Date.now(),
+        };
+        
         setCubeState(prev => ({
           ...prev,
-          lastMove: move,
-          moveCount: prev.moveCount + 1,
-          facelets: applyMove(prev.facelets, move),
+          lastMove: moveEvent,
+          moveCount: prev.moveCount + parsed.moves!.length,
+          facelets: applyMove(prev.facelets, moveEvent),
         }));
       }
-      return;
-    }
-    
-    // Message type 4 = Facelet state
-    // Message type 9 = Battery level
-    if (messageType === 9 && bytes.length >= 2) {
-      const battery = bytes[1];
+    } else if (parsed.type === 9 && parsed.battery !== undefined) {
+      // Battery level
       setCubeState(prev => ({
         ...prev,
-        batteryLevel: battery,
+        batteryLevel: parsed.battery!,
       }));
     }
-  }, [parseMove, parseGyroData, applyMove]);
+  }, [applyMove, processGyroData]);
+
+  // Request cube state
+  const requestCubeState = useCallback(async () => {
+    if (writeCharacteristicRef.current) {
+      try {
+        // Request facelet state (command 4)
+        const cmd = new Uint8Array([0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        await writeCharacteristicRef.current.writeValue(cmd);
+      } catch (e) {
+        console.error('[GAN] Failed to request state:', e);
+      }
+    }
+  }, []);
+
+  // Request battery level
+  const requestBattery = useCallback(async () => {
+    if (writeCharacteristicRef.current) {
+      try {
+        const cmd = new Uint8Array([0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        await writeCharacteristicRef.current.writeValue(cmd);
+      } catch (e) {
+        console.error('[GAN] Failed to request battery:', e);
+      }
+    }
+  }, []);
 
   // Connect to the cube
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (mac?: string) => {
     if (!navigator.bluetooth) {
-      setError('Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.');
+      setError('Web Bluetooth is not supported. Please use Chrome, Edge, or Opera.');
+      return;
+    }
+
+    const macToUse = mac || macAddress;
+    if (!macToUse) {
+      setError('MAC address is required. Find it at chrome://bluetooth-internals after connecting your cube.');
+      return;
+    }
+
+    // Validate MAC format
+    if (!/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(macToUse)) {
+      setError('Invalid MAC address format. Use XX:XX:XX:XX:XX:XX');
       return;
     }
 
@@ -227,16 +236,9 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
         filters: [
           { namePrefix: 'GAN' },
           { namePrefix: 'Gan' },
-          { namePrefix: 'gan' },
-          { namePrefix: 'MG' }, // Monster Go
+          { namePrefix: 'MG' },
         ],
-        optionalServices: [
-          GAN_GEN2_SERVICE,
-          GAN_GEN3_SERVICE,
-          GAN_GEN4_SERVICE,
-          GAN_LEGACY_SERVICE,
-          '0000180f-0000-1000-8000-00805f9b34fb' // Battery service
-        ],
+        optionalServices: [GAN_SERVICE],
       });
 
       deviceRef.current = device;
@@ -245,74 +247,47 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       device.addEventListener('gattserverdisconnected', () => {
         setConnectionState('disconnected');
         setDeviceName(null);
+        prevMoveCntRef.current = -1;
       });
 
       const server = await device.gatt?.connect();
       if (!server) throw new Error('Failed to connect to GATT server');
 
-      // Try different service UUIDs in order of likelihood
-      let service: BluetoothRemoteGATTService | null = null;
-      let readCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
-      let protocolVersion = 'unknown';
+      // Get the V2 service
+      const service = await server.getPrimaryService(GAN_SERVICE);
       
-      // Try Gen2 protocol first (most common for GAN i3, i Carry, etc.)
-      try {
-        console.log('Trying GAN Gen2 protocol...');
-        service = await server.getPrimaryService(GAN_GEN2_SERVICE);
-        readCharacteristic = await service.getCharacteristic(GAN_GEN2_STATE_CHARACTERISTIC);
-        writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN2_COMMAND_CHARACTERISTIC);
-        protocolVersion = 'gen2';
-        console.log('Connected using Gen2 protocol');
-      } catch {
-        // Try Gen3 protocol
-        try {
-          console.log('Trying GAN Gen3 protocol...');
-          service = await server.getPrimaryService(GAN_GEN3_SERVICE);
-          readCharacteristic = await service.getCharacteristic(GAN_GEN3_STATE_CHARACTERISTIC);
-          writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN3_COMMAND_CHARACTERISTIC);
-          protocolVersion = 'gen3';
-          console.log('Connected using Gen3 protocol');
-        } catch {
-          // Try Gen4 protocol
-          try {
-            console.log('Trying GAN Gen4 protocol...');
-            service = await server.getPrimaryService(GAN_GEN4_SERVICE);
-            readCharacteristic = await service.getCharacteristic(GAN_GEN4_STATE_CHARACTERISTIC);
-            writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN4_COMMAND_CHARACTERISTIC);
-            protocolVersion = 'gen4';
-            console.log('Connected using Gen4 protocol');
-          } catch {
-            // Try Legacy protocol
-            try {
-              console.log('Trying GAN Legacy protocol...');
-              service = await server.getPrimaryService(GAN_LEGACY_SERVICE);
-              readCharacteristic = await service.getCharacteristic(GAN_LEGACY_STATE_CHARACTERISTIC);
-              writeCharacteristicRef.current = await service.getCharacteristic(GAN_LEGACY_COMMAND_CHARACTERISTIC);
-              protocolVersion = 'legacy';
-              console.log('Connected using Legacy protocol');
-            } catch (e4) {
-              console.error('All protocols failed:', e4);
-              throw new Error('Could not find GAN cube service. Make sure your cube is in pairing mode and try again.');
-            }
-          }
-        }
+      // Get characteristics
+      const readCharacteristic = await service.getCharacteristic(GAN_READ_CHARACTERISTIC);
+      writeCharacteristicRef.current = await service.getCharacteristic(GAN_WRITE_CHARACTERISTIC);
+      characteristicRef.current = readCharacteristic;
+
+      // Initialize decoder with MAC address
+      const decoderInitialized = decoderRef.current.initDecoder(macToUse);
+      if (!decoderInitialized) {
+        console.warn('[GAN] Decoder init failed, data may be encrypted');
       }
 
-      if (!readCharacteristic) throw new Error('Could not find read characteristic');
-
-      characteristicRef.current = readCharacteristic;
+      // Save MAC address
+      setMacAddress(macToUse);
 
       // Start notifications
       await readCharacteristic.startNotifications();
       readCharacteristic.addEventListener('characteristicvaluechanged', handleCharacteristicChange);
 
       setConnectionState('connected');
+      
+      // Request initial state
+      setTimeout(() => {
+        requestCubeState();
+        requestBattery();
+      }, 500);
+
     } catch (err) {
       console.error('Connection error:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect to cube');
       setConnectionState('disconnected');
     }
-  }, [handleCharacteristicChange]);
+  }, [handleCharacteristicChange, macAddress, requestBattery, requestCubeState, setMacAddress]);
 
   // Disconnect from the cube
   const disconnect = useCallback(() => {
@@ -325,6 +300,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     deviceRef.current = null;
     characteristicRef.current = null;
     writeCharacteristicRef.current = null;
+    prevMoveCntRef.current = -1;
     setConnectionState('disconnected');
     setDeviceName(null);
   }, [handleCharacteristicChange]);
@@ -338,21 +314,18 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       moveCount: 0,
       lastMove: null,
     });
+    // Reset gyro accumulators
+    gyroAccumulator.current = { x: 0, y: 0, z: 0 };
+    smoothedGyro.current = { x: 0, y: 0, z: 0 };
   }, [cubeState.batteryLevel]);
 
-  // Sync cube state (request current state from cube)
+  // Sync cube state
   const syncCube = useCallback(async () => {
-    if (writeCharacteristicRef.current && connectionState === 'connected') {
-      try {
-        // Send sync request command to cube
-        // GAN protocol: request current state
-        const syncCommand = new Uint8Array([0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        await writeCharacteristicRef.current.writeValue(syncCommand);
-      } catch (err) {
-        console.error('Sync error:', err);
-      }
+    if (connectionState === 'connected') {
+      await requestCubeState();
+      await requestBattery();
     }
-  }, [connectionState]);
+  }, [connectionState, requestBattery, requestCubeState]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -370,5 +343,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     syncCube,
     error,
     deviceName,
+    macAddress,
+    setMacAddress,
   };
 };
