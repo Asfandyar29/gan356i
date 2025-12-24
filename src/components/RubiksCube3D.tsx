@@ -1,0 +1,221 @@
+import { useRef, useMemo } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, RoundedBox } from '@react-three/drei';
+import * as THREE from 'three';
+import { Facelets, CubeColor, CubeOrientation } from '@/types/cube';
+
+// Map cube colors to hex values - matching GAN cube stickerless colors
+const colorMap: Record<CubeColor, string> = {
+  white: '#FFFFFF',
+  yellow: '#FEDD00',
+  green: '#00A550',
+  blue: '#0046AD',
+  red: '#C41E3A',
+  orange: '#FF5F00',
+};
+
+interface CubeletProps {
+  position: [number, number, number];
+  colors: (CubeColor | null)[];
+  isCenter?: boolean;
+}
+
+const Cubelet = ({ position, colors, isCenter = false }: CubeletProps) => {
+  const size = 0.95;
+  const stickerOffset = 0.48;
+  const stickerSize = 0.82;
+  const stickerThickness = 0.015;
+  const stickerRadius = 0.1;
+
+  // Face directions: +X, -X, +Y, -Y, +Z, -Z (R, L, U, D, F, B)
+  const faceDirections: [number, number, number][] = [
+    [1, 0, 0],   // Right
+    [-1, 0, 0],  // Left
+    [0, 1, 0],   // Up
+    [0, -1, 0],  // Down
+    [0, 0, 1],   // Front
+    [0, 0, -1],  // Back
+  ];
+
+  const faceRotations: [number, number, number][] = [
+    [0, Math.PI / 2, 0],  // Right
+    [0, -Math.PI / 2, 0], // Left
+    [-Math.PI / 2, 0, 0], // Up
+    [Math.PI / 2, 0, 0],  // Down
+    [0, 0, 0],            // Front
+    [0, Math.PI, 0],      // Back
+  ];
+
+  return (
+    <group position={position}>
+      {/* Black cube body */}
+      <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
+        <meshStandardMaterial color="#1a1a1a" />
+      </RoundedBox>
+
+      {/* Stickers */}
+      {colors.map((color, index) => {
+        if (!color) return null;
+        const dir = faceDirections[index];
+        const rot = faceRotations[index];
+        const stickerPos: [number, number, number] = [
+          dir[0] * stickerOffset,
+          dir[1] * stickerOffset,
+          dir[2] * stickerOffset,
+        ];
+
+        // Check if this is the white center (for GAN logo)
+        const isWhiteCenter = isCenter && color === 'white' && index === 2;
+
+        return (
+          <group key={index} position={stickerPos} rotation={rot}>
+            <RoundedBox args={[stickerSize, stickerSize, stickerThickness]} radius={stickerRadius} smoothness={4}>
+              <meshStandardMaterial 
+                color={colorMap[color]} 
+                roughness={0.3}
+                metalness={0.1}
+              />
+            </RoundedBox>
+            {/* GAN Logo on white center */}
+            {isWhiteCenter && (
+              <mesh position={[0, 0, 0.02]}>
+                <planeGeometry args={[0.4, 0.25]} />
+                <meshBasicMaterial color="#0046AD" transparent opacity={0.9} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
+    </group>
+  );
+};
+
+interface CubeGroupProps {
+  facelets: Facelets;
+  orientation: CubeOrientation;
+}
+
+const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const targetOrientation = useRef({ x: 0, y: 0, z: 0 });
+
+  // Smoothly interpolate orientation
+  useFrame(() => {
+    if (groupRef.current) {
+      // Convert orientation to radians
+      targetOrientation.current.x = orientation.x * (Math.PI / 180);
+      targetOrientation.current.y = orientation.y * (Math.PI / 180);
+      targetOrientation.current.z = orientation.z * (Math.PI / 180);
+
+      // Smooth interpolation
+      groupRef.current.rotation.x += (targetOrientation.current.x - groupRef.current.rotation.x) * 0.1;
+      groupRef.current.rotation.y += (targetOrientation.current.y - groupRef.current.rotation.y) * 0.1;
+      groupRef.current.rotation.z += (targetOrientation.current.z - groupRef.current.rotation.z) * 0.1;
+    }
+  });
+
+  // Generate cubelet data from facelets
+  const cubelets = useMemo(() => {
+    const result: { position: [number, number, number]; colors: (CubeColor | null)[]; isCenter: boolean }[] = [];
+
+    // Position offsets for 3x3 cube
+    const offsets = [-1, 0, 1];
+
+    for (let y = 0; y < 3; y++) {
+      for (let z = 0; z < 3; z++) {
+        for (let x = 0; x < 3; x++) {
+          // Skip center cubes (not visible)
+          if (x === 1 && y === 1 && z === 1) continue;
+
+          const position: [number, number, number] = [offsets[x], offsets[2-y], offsets[2-z]];
+          const colors: (CubeColor | null)[] = [null, null, null, null, null, null];
+          
+          // Check if this is a face center piece
+          const isCenter = (x === 1 && y === 1) || (y === 1 && z === 1) || (x === 1 && z === 1);
+
+          // Assign colors based on position
+          // Right face (x = 2)
+          if (x === 2) {
+            const idx = 9 + (2-y) * 3 + (2-z);
+            colors[0] = facelets[idx] || 'red';
+          }
+          // Left face (x = 0)
+          if (x === 0) {
+            const idx = 36 + (2-y) * 3 + z;
+            colors[1] = facelets[idx] || 'orange';
+          }
+          // Up face (y = 0)
+          if (y === 0) {
+            const idx = z * 3 + x;
+            colors[2] = facelets[idx] || 'white';
+          }
+          // Down face (y = 2)
+          if (y === 2) {
+            const idx = 27 + (2-z) * 3 + x;
+            colors[3] = facelets[idx] || 'yellow';
+          }
+          // Front face (z = 0)
+          if (z === 0) {
+            const idx = 18 + (2-y) * 3 + x;
+            colors[4] = facelets[idx] || 'green';
+          }
+          // Back face (z = 2)
+          if (z === 2) {
+            const idx = 45 + (2-y) * 3 + (2-x);
+            colors[5] = facelets[idx] || 'blue';
+          }
+
+          result.push({ position, colors, isCenter });
+        }
+      }
+    }
+
+    return result;
+  }, [facelets]);
+
+  return (
+    <group ref={groupRef}>
+      {cubelets.map((cubelet, index) => (
+        <Cubelet 
+          key={index} 
+          position={cubelet.position} 
+          colors={cubelet.colors}
+          isCenter={cubelet.isCenter}
+        />
+      ))}
+    </group>
+  );
+};
+
+interface RubiksCube3DProps {
+  facelets: Facelets;
+  orientation: CubeOrientation;
+}
+
+const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
+  return (
+    <div className="w-full h-[400px] md:h-[500px]">
+      <Canvas
+        camera={{ position: [4, 3, 4], fov: 45 }}
+        gl={{ antialias: true }}
+      >
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[10, 10, 5]} intensity={1} />
+        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
+        <pointLight position={[0, 10, 0]} intensity={0.5} />
+        
+        <CubeGroup facelets={facelets} orientation={orientation} />
+        
+        <OrbitControls 
+          enablePan={false} 
+          enableZoom={true}
+          minDistance={5}
+          maxDistance={12}
+          autoRotate={false}
+        />
+      </Canvas>
+    </div>
+  );
+};
+
+export default RubiksCube3D;
