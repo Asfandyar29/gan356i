@@ -56,6 +56,11 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const deviceRef = useRef<BluetoothDevice | null>(null);
   const characteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const writeCharacteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
+  
+  // Gyro smoothing state - all useRefs must be declared together at top
+  const gyroAccumulator = useRef({ x: 0, y: 0, z: 0 });
+  const smoothedGyro = useRef({ x: 0, y: 0, z: 0 });
+  const lastGyroUpdate = useRef(Date.now());
 
   // Face index mapping for GAN cubes
   const faceMap: CubeFace[] = ['U', 'R', 'F', 'D', 'L', 'B'];
@@ -80,11 +85,6 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       return null;
     }
   }, []);
-
-  // Gyro smoothing state - use refs to persist between renders
-  const gyroAccumulator = useRef({ x: 0, y: 0, z: 0 });
-  const smoothedGyro = useRef({ x: 0, y: 0, z: 0 });
-  const lastGyroUpdate = useRef(Date.now());
   
   // Parse orientation data (gyroscope) - V2 protocol
   // GAN cubes send gyro as 8-bit signed values (-128 to 127) at offsets 1,2,3 after message type
