@@ -81,17 +81,56 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     }
   }, []);
 
-  // Parse orientation data (gyroscope)
-  const parseOrientation = useCallback((data: DataView): CubeOrientation => {
+  // Gyro smoothing state - use refs to persist between renders
+  const gyroAccumulator = useRef({ x: 0, y: 0, z: 0 });
+  const smoothedGyro = useRef({ x: 0, y: 0, z: 0 });
+  const lastGyroUpdate = useRef(Date.now());
+  
+  // Parse orientation data (gyroscope) - V2 protocol
+  // GAN cubes send gyro as 8-bit signed values (-128 to 127) at offsets 1,2,3 after message type
+  const parseGyroData = useCallback((data: number[]): CubeOrientation | null => {
     try {
-      // GAN cubes send gyro data as 3 signed 16-bit integers
-      // Typically at specific offsets in the data packet
-      const x = data.getInt16(2, true) / 100;
-      const y = data.getInt16(4, true) / 100;
-      const z = data.getInt16(6, true) / 100;
-      return { x, y, z };
+      // Message type 1 = gyro data in V2 protocol
+      // Values are signed bytes representing angular velocity, not absolute angles
+      const rawX = data[1] > 127 ? data[1] - 256 : data[1];
+      const rawY = data[2] > 127 ? data[2] - 256 : data[2];
+      const rawZ = data[3] > 127 ? data[3] - 256 : data[3];
+      
+      // Apply deadzone to filter noise (cube is stationary if values are small)
+      const DEADZONE = 5;
+      const x = Math.abs(rawX) < DEADZONE ? 0 : rawX;
+      const y = Math.abs(rawY) < DEADZONE ? 0 : rawY;
+      const z = Math.abs(rawZ) < DEADZONE ? 0 : rawZ;
+      
+      // If all values are in deadzone, no significant movement
+      if (x === 0 && y === 0 && z === 0) {
+        return null;
+      }
+      
+      // Calculate time delta for integration
+      const now = Date.now();
+      const dt = Math.min((now - lastGyroUpdate.current) / 1000, 0.1); // Cap at 100ms
+      lastGyroUpdate.current = now;
+      
+      // Integrate angular velocity to get angle change (scale factor tuned for GAN cubes)
+      const SCALE = 0.5;
+      gyroAccumulator.current.x += x * dt * SCALE;
+      gyroAccumulator.current.y += y * dt * SCALE;
+      gyroAccumulator.current.z += z * dt * SCALE;
+      
+      // Apply low-pass filter for smooth movement
+      const SMOOTHING = 0.15;
+      smoothedGyro.current.x += (gyroAccumulator.current.x - smoothedGyro.current.x) * SMOOTHING;
+      smoothedGyro.current.y += (gyroAccumulator.current.y - smoothedGyro.current.y) * SMOOTHING;
+      smoothedGyro.current.z += (gyroAccumulator.current.z - smoothedGyro.current.z) * SMOOTHING;
+      
+      return {
+        x: smoothedGyro.current.x,
+        y: smoothedGyro.current.y,
+        z: smoothedGyro.current.z,
+      };
     } catch {
-      return { x: 0, y: 0, z: 0 };
+      return null;
     }
   }, []);
 
@@ -120,20 +159,36 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     return newFacelets;
   }, []);
 
-  // Handle incoming data from the cube
+  // Handle incoming data from the cube (V2 protocol)
   const handleCharacteristicChange = useCallback((event: Event) => {
     const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
     const value = characteristic.value;
     if (!value) return;
 
-    const data = new DataView(value.buffer);
+    // Convert to byte array for V2 protocol parsing
+    const bytes: number[] = [];
+    for (let i = 0; i < value.byteLength; i++) {
+      bytes[i] = value.getUint8(i);
+    }
     
-    // Parse the incoming data based on GAN protocol
-    const messageType = data.getUint8(0);
+    // V2 protocol message type is in first 4 bits of first byte
+    const messageType = bytes[0] >> 4;
     
-    // Different message types from GAN cubes
-    if (messageType < 12) {
-      // Move event
+    // Message type 1 = Gyro data
+    if (messageType === 1) {
+      const orientation = parseGyroData(bytes);
+      if (orientation) {
+        setCubeState(prev => ({
+          ...prev,
+          orientation,
+        }));
+      }
+      return;
+    }
+    
+    // Message type 2 = Move data
+    if (messageType === 2) {
+      const data = new DataView(value.buffer);
       const move = parseMove(data);
       if (move) {
         setCubeState(prev => ({
@@ -143,15 +198,19 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
           facelets: applyMove(prev.facelets, move),
         }));
       }
-    } else if (data.byteLength >= 8) {
-      // Orientation/gyro data
-      const orientation = parseOrientation(data);
+      return;
+    }
+    
+    // Message type 4 = Facelet state
+    // Message type 9 = Battery level
+    if (messageType === 9 && bytes.length >= 2) {
+      const battery = bytes[1];
       setCubeState(prev => ({
         ...prev,
-        orientation,
+        batteryLevel: battery,
       }));
     }
-  }, [parseMove, parseOrientation, applyMove]);
+  }, [parseMove, parseGyroData, applyMove]);
 
   // Connect to the cube
   const connect = useCallback(async () => {
