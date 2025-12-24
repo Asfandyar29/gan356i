@@ -9,15 +9,26 @@ import {
   Facelets 
 } from '@/types/cube';
 
-// GAN Cube Bluetooth UUIDs (common for GAN smart cubes)
-const GAN_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
-const GAN_CHARACTERISTIC_UUID = '0000fff6-0000-1000-8000-00805f9b34fb';
-const GAN_WRITE_UUID = '0000fff5-0000-1000-8000-00805f9b34fb';
+// GAN Cube Bluetooth UUIDs - From official gan-web-bluetooth library
+// Gen2 protocol (GAN356 i, GAN356 i Carry, GAN356 i3, etc.)
+const GAN_GEN2_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dc4179';
+const GAN_GEN2_COMMAND_CHARACTERISTIC = '28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4';
+const GAN_GEN2_STATE_CHARACTERISTIC = '28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4';
 
-// Alternative UUIDs for different GAN cube models
-const GAN_SERVICE_UUID_V2 = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const GAN_READ_UUID_V2 = '28be4cb6-cd67-11e9-a32f-2a2ae2dbcce4';
-const GAN_WRITE_UUID_V2 = '28be4a4a-cd67-11e9-a32f-2a2ae2dbcce4';
+// Gen3 protocol (GAN356 i Carry 2)
+const GAN_GEN3_SERVICE = '8653000a-43e6-47b7-9cb0-5fc21d4ae340';
+const GAN_GEN3_COMMAND_CHARACTERISTIC = '8653000c-43e6-47b7-9cb0-5fc21d4ae340';
+const GAN_GEN3_STATE_CHARACTERISTIC = '8653000b-43e6-47b7-9cb0-5fc21d4ae340';
+
+// Gen4 protocol (newer models like GAN12 ui Maglev)
+const GAN_GEN4_SERVICE = '00000010-0000-fff7-fff6-fff5fff4fff0';
+const GAN_GEN4_COMMAND_CHARACTERISTIC = '0000fff5-0000-1000-8000-00805f9b34fb';
+const GAN_GEN4_STATE_CHARACTERISTIC = '0000fff6-0000-1000-8000-00805f9b34fb';
+
+// Legacy service UUID (older cubes)
+const GAN_LEGACY_SERVICE = '0000fff0-0000-1000-8000-00805f9b34fb';
+const GAN_LEGACY_STATE_CHARACTERISTIC = '0000fff6-0000-1000-8000-00805f9b34fb';
+const GAN_LEGACY_COMMAND_CHARACTERISTIC = '0000fff5-0000-1000-8000-00805f9b34fb';
 
 interface UseCubeConnectionReturn {
   connectionState: ConnectionState;
@@ -161,8 +172,10 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
           { namePrefix: 'MG' }, // Monster Go
         ],
         optionalServices: [
-          GAN_SERVICE_UUID, 
-          GAN_SERVICE_UUID_V2,
+          GAN_GEN2_SERVICE,
+          GAN_GEN3_SERVICE,
+          GAN_GEN4_SERVICE,
+          GAN_LEGACY_SERVICE,
           '0000180f-0000-1000-8000-00805f9b34fb' // Battery service
         ],
       });
@@ -178,21 +191,51 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       const server = await device.gatt?.connect();
       if (!server) throw new Error('Failed to connect to GATT server');
 
-      // Try different service UUIDs
+      // Try different service UUIDs in order of likelihood
       let service: BluetoothRemoteGATTService | null = null;
       let readCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+      let protocolVersion = 'unknown';
       
+      // Try Gen2 protocol first (most common for GAN i3, i Carry, etc.)
       try {
-        service = await server.getPrimaryService(GAN_SERVICE_UUID);
-        readCharacteristic = await service.getCharacteristic(GAN_CHARACTERISTIC_UUID);
-        writeCharacteristicRef.current = await service.getCharacteristic(GAN_WRITE_UUID);
+        console.log('Trying GAN Gen2 protocol...');
+        service = await server.getPrimaryService(GAN_GEN2_SERVICE);
+        readCharacteristic = await service.getCharacteristic(GAN_GEN2_STATE_CHARACTERISTIC);
+        writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN2_COMMAND_CHARACTERISTIC);
+        protocolVersion = 'gen2';
+        console.log('Connected using Gen2 protocol');
       } catch {
+        // Try Gen3 protocol
         try {
-          service = await server.getPrimaryService(GAN_SERVICE_UUID_V2);
-          readCharacteristic = await service.getCharacteristic(GAN_READ_UUID_V2);
-          writeCharacteristicRef.current = await service.getCharacteristic(GAN_WRITE_UUID_V2);
-        } catch (e2) {
-          throw new Error('Could not find GAN cube service. Make sure your cube is in pairing mode.');
+          console.log('Trying GAN Gen3 protocol...');
+          service = await server.getPrimaryService(GAN_GEN3_SERVICE);
+          readCharacteristic = await service.getCharacteristic(GAN_GEN3_STATE_CHARACTERISTIC);
+          writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN3_COMMAND_CHARACTERISTIC);
+          protocolVersion = 'gen3';
+          console.log('Connected using Gen3 protocol');
+        } catch {
+          // Try Gen4 protocol
+          try {
+            console.log('Trying GAN Gen4 protocol...');
+            service = await server.getPrimaryService(GAN_GEN4_SERVICE);
+            readCharacteristic = await service.getCharacteristic(GAN_GEN4_STATE_CHARACTERISTIC);
+            writeCharacteristicRef.current = await service.getCharacteristic(GAN_GEN4_COMMAND_CHARACTERISTIC);
+            protocolVersion = 'gen4';
+            console.log('Connected using Gen4 protocol');
+          } catch {
+            // Try Legacy protocol
+            try {
+              console.log('Trying GAN Legacy protocol...');
+              service = await server.getPrimaryService(GAN_LEGACY_SERVICE);
+              readCharacteristic = await service.getCharacteristic(GAN_LEGACY_STATE_CHARACTERISTIC);
+              writeCharacteristicRef.current = await service.getCharacteristic(GAN_LEGACY_COMMAND_CHARACTERISTIC);
+              protocolVersion = 'legacy';
+              console.log('Connected using Legacy protocol');
+            } catch (e4) {
+              console.error('All protocols failed:', e4);
+              throw new Error('Could not find GAN cube service. Make sure your cube is in pairing mode and try again.');
+            }
+          }
         }
       }
 
