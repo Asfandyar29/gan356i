@@ -1,8 +1,21 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation } from '@/types/cube';
+
+// Check WebGL support
+const isWebGLAvailable = (): boolean => {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+    );
+  } catch {
+    return false;
+  }
+};
 
 // Map cube colors to hex values - matching GAN cube stickerless colors
 const colorMap: Record<CubeColor, string> = {
@@ -193,11 +206,34 @@ interface RubiksCube3DProps {
 }
 
 const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
+  const [webGLSupported, setWebGLSupported] = useState(true);
+
+  useEffect(() => {
+    setWebGLSupported(isWebGLAvailable());
+  }, []);
+
+  if (!webGLSupported) {
+    return (
+      <div className="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-muted/50 rounded-lg border border-border">
+        <div className="text-center p-6">
+          <div className="text-6xl mb-4">🎲</div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">3D View Unavailable</h3>
+          <p className="text-sm text-muted-foreground">
+            WebGL is not supported in this browser. The cube tracking is still active.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-[400px] md:h-[500px]">
       <Canvas
         camera={{ position: [4, 3, 4], fov: 45 }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, failIfMajorPerformanceCaveat: false }}
+        onCreated={({ gl }) => {
+          gl.setClearColor('#000000', 0);
+        }}
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
