@@ -15,12 +15,18 @@ import { Subscription } from 'rxjs';
 interface UseCubeConnectionReturn {
   connectionState: ConnectionState;
   cubeState: CubeState;
-  connect: () => Promise<void>;
+  connect: (macAddress?: string) => Promise<void>;
   disconnect: () => void;
   resetCube: () => void;
   syncCube: () => void;
   error: string | null;
   deviceName: string | null;
+  macAddress: string | null;
+  setMacAddress: (mac: string) => void;
+  needsMacAddress: boolean;
+  pendingDeviceName: string | null;
+  confirmMacAddress: (mac: string) => void;
+  cancelConnection: () => void;
 }
 
 // Convert Kociemba notation facelets string to our color array
@@ -65,6 +71,14 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [macAddress, setMacAddressState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ganCubeMac') || null;
+    }
+    return null;
+  });
+  const [needsMacAddress, setNeedsMacAddress] = useState(false);
+  const [pendingDeviceName, setPendingDeviceName] = useState<string | null>(null);
   const [cubeState, setCubeState] = useState<CubeState>({
     facelets: createSolvedCube(),
     orientation: { x: 0, y: 0, z: 0 },
@@ -76,6 +90,15 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const connectionRef = useRef<GanCubeConnection | null>(null);
   const subscriptionRef = useRef<Subscription | null>(null);
   const moveCountRef = useRef(0);
+  const macResolverRef = useRef<((mac: string | null) => void) | null>(null);
+
+  // Set MAC address and save to localStorage
+  const setMacAddress = useCallback((mac: string) => {
+    setMacAddressState(mac);
+    if (typeof window !== 'undefined' && mac) {
+      localStorage.setItem('ganCubeMac', mac);
+    }
+  }, []);
 
   // Handle cube events
   const handleCubeEvent = useCallback((event: GanCubeEvent) => {
@@ -125,21 +148,78 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     }
   }, []);
 
+  // Custom MAC address provider
+  const customMacAddressProvider = useCallback(async (
+    device: BluetoothDevice, 
+    isFallbackCall?: boolean
+  ): Promise<string | null> => {
+    // If we have a saved MAC address, try it first
+    const savedMac = localStorage.getItem('ganCubeMac');
+    if (!isFallbackCall && savedMac) {
+      return savedMac;
+    }
+
+    // If this is a fallback call, we need to ask the user for the MAC address
+    if (isFallbackCall) {
+      setPendingDeviceName(device.name || 'GAN Cube');
+      setNeedsMacAddress(true);
+      
+      // Return a promise that will be resolved when user provides MAC
+      return new Promise<string | null>((resolve) => {
+        macResolverRef.current = resolve;
+      });
+    }
+
+    return null;
+  }, []);
+
+  // Confirm MAC address from user
+  const confirmMacAddress = useCallback((mac: string) => {
+    setMacAddress(mac);
+    setNeedsMacAddress(false);
+    setPendingDeviceName(null);
+    if (macResolverRef.current) {
+      macResolverRef.current(mac);
+      macResolverRef.current = null;
+    }
+  }, [setMacAddress]);
+
+  // Cancel connection
+  const cancelConnection = useCallback(() => {
+    setNeedsMacAddress(false);
+    setPendingDeviceName(null);
+    setConnectionState('disconnected');
+    if (macResolverRef.current) {
+      macResolverRef.current(null);
+      macResolverRef.current = null;
+    }
+  }, []);
+
   // Connect to the cube
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (providedMac?: string) => {
     if (!navigator.bluetooth) {
       setError('Web Bluetooth is not supported. Please use Chrome, Edge, or Opera.');
       return;
+    }
+
+    // If MAC is provided directly, save it
+    if (providedMac) {
+      setMacAddress(providedMac);
     }
 
     setConnectionState('connecting');
     setError(null);
 
     try {
-      const conn = await connectGanCube();
+      const conn = await connectGanCube(customMacAddressProvider);
       
       connectionRef.current = conn;
       setDeviceName(conn.deviceName);
+      
+      // Save the MAC address from the connection
+      if (conn.deviceMAC) {
+        setMacAddress(conn.deviceMAC);
+      }
       
       // Subscribe to events
       subscriptionRef.current = conn.events$.subscribe({
@@ -160,10 +240,13 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
     } catch (err) {
       console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect to cube');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to connect to cube';
+      setError(errorMessage);
       setConnectionState('disconnected');
+      setNeedsMacAddress(false);
+      setPendingDeviceName(null);
     }
-  }, [handleCubeEvent]);
+  }, [handleCubeEvent, customMacAddressProvider, setMacAddress]);
 
   // Disconnect from the cube
   const disconnect = useCallback(async () => {
@@ -220,5 +303,11 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     syncCube,
     error,
     deviceName,
+    macAddress,
+    setMacAddress,
+    needsMacAddress,
+    pendingDeviceName,
+    confirmMacAddress,
+    cancelConnection,
   };
 };

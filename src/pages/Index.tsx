@@ -19,6 +19,11 @@ const CubeTracker = () => {
     syncCube,
     error,
     deviceName,
+    macAddress,
+    needsMacAddress,
+    pendingDeviceName,
+    confirmMacAddress,
+    cancelConnection,
   } = useCubeConnection();
 
   const { time, timerState, startTimer, stopTimer, resetTimer, formattedTime } = useTimer();
@@ -103,13 +108,18 @@ const CubeTracker = () => {
   }, [resetTimer]);
 
   // Show connect prompt if not connected and not in demo mode
-  if (!isConnected) {
+  if (!isConnected || needsMacAddress) {
     return (
       <ConnectPrompt
         onConnect={connect}
         onDemoMode={handleDemoMode}
         isConnecting={connectionState === 'connecting'}
         error={error}
+        savedMacAddress={macAddress}
+        needsMacAddress={needsMacAddress}
+        pendingDeviceName={pendingDeviceName}
+        onConfirmMacAddress={confirmMacAddress}
+        onCancelConnection={cancelConnection}
       />
     );
   }
