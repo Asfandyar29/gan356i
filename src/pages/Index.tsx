@@ -19,8 +19,6 @@ const CubeTracker = () => {
     syncCube,
     error,
     deviceName,
-    macAddress,
-    setMacAddress,
   } = useCubeConnection();
 
   const { time, timerState, startTimer, stopTimer, resetTimer, formattedTime } = useTimer();
@@ -108,11 +106,10 @@ const CubeTracker = () => {
   if (!isConnected) {
     return (
       <ConnectPrompt
-        onConnect={(mac) => connect(mac)}
+        onConnect={connect}
         onDemoMode={handleDemoMode}
         isConnecting={connectionState === 'connecting'}
         error={error}
-        savedMacAddress={macAddress}
       />
     );
   }
