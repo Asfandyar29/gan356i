@@ -4,9 +4,9 @@ import { ConnectionState } from '@/types/cube';
 
 interface ControlPanelProps {
   connectionState: ConnectionState;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onSync: () => void;
+  onConnect: () => void | Promise<void>;
+  onDisconnect: () => void | Promise<void>;
+  onSync: () => void | Promise<void>;
   onReset: () => void;
   onScramble: () => void;
   deviceName: string | null;
@@ -30,7 +30,7 @@ const ControlPanel = ({
         <Button
           variant={isConnecting ? 'secondary' : 'hero'}
           size="lg"
-          onClick={onConnect}
+          onClick={() => onConnect()}
           disabled={isConnecting}
           className="min-w-[180px]"
         >
@@ -55,7 +55,7 @@ const ControlPanel = ({
             <span className="text-sm font-medium">{deviceName || 'Connected'}</span>
           </div>
           
-          <Button variant="glass" size="default" onClick={onSync}>
+          <Button variant="glass" size="default" onClick={() => onSync()}>
             <RefreshCw className="w-4 h-4" />
             Sync
           </Button>
@@ -70,7 +70,7 @@ const ControlPanel = ({
             Scramble
           </Button>
 
-          <Button variant="outline" size="default" onClick={onDisconnect}>
+          <Button variant="outline" size="default" onClick={() => onDisconnect()}>
             Disconnect
           </Button>
         </>
