@@ -115,9 +115,9 @@ const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
   // Smoothly interpolate orientation
   useFrame(() => {
     if (groupRef.current) {
-      // Convert orientation to radians (swapped Z with XY axes to match physical cube)
-      targetOrientation.current.x = -orientation.z * (Math.PI / 180);
-      targetOrientation.current.y = -orientation.y * (Math.PI / 180);
+      // Convert orientation to radians (swapped X/Y and inverted both)
+      targetOrientation.current.x = orientation.y * (Math.PI / 180);
+      targetOrientation.current.y = orientation.z * (Math.PI / 180);
       targetOrientation.current.z = -orientation.x * (Math.PI / 180);
 
       // Smooth interpolation
