@@ -115,10 +115,10 @@ const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
   // Smoothly interpolate orientation
   useFrame(() => {
     if (groupRef.current) {
-      // Convert orientation to radians
-      targetOrientation.current.x = orientation.x * (Math.PI / 180);
-      targetOrientation.current.y = orientation.y * (Math.PI / 180);
-      targetOrientation.current.z = orientation.z * (Math.PI / 180);
+      // Convert orientation to radians (inverted axes to match physical cube)
+      targetOrientation.current.x = -orientation.x * (Math.PI / 180);
+      targetOrientation.current.y = -orientation.y * (Math.PI / 180);
+      targetOrientation.current.z = -orientation.z * (Math.PI / 180);
 
       // Smooth interpolation
       groupRef.current.rotation.x += (targetOrientation.current.x - groupRef.current.rotation.x) * 0.1;
@@ -167,15 +167,15 @@ const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
             const idx = z * 3 + x;
             colors[3] = facelets[idx] || 'white';
           }
-          // Front face (z = 0) - now shows Blue (was Green)
+          // Front face (z = 0) - now shows Green (swapped with Blue)
           if (z === 0) {
-            const idx = 45 + (2-y) * 3 + (2-x);
-            colors[4] = facelets[idx] || 'blue';
-          }
-          // Back face (z = 2) - now shows Green (was Blue)
-          if (z === 2) {
             const idx = 18 + (2-y) * 3 + x;
-            colors[5] = facelets[idx] || 'green';
+            colors[4] = facelets[idx] || 'green';
+          }
+          // Back face (z = 2) - now shows Blue (swapped with Green)
+          if (z === 2) {
+            const idx = 45 + (2-y) * 3 + (2-x);
+            colors[5] = facelets[idx] || 'blue';
           }
 
           result.push({ position, colors, isCenter });
