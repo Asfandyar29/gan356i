@@ -1,8 +1,9 @@
-import { useRef, useMemo, useState, useEffect } from 'react';
+import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation } from '@/types/cube';
+import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
 
 // Check WebGL support
 const isWebGLAvailable = (): boolean => {
@@ -106,19 +107,27 @@ const Cubelet = ({ position, colors, isCenter = false }: CubeletProps) => {
 interface CubeGroupProps {
   facelets: Facelets;
   orientation: CubeOrientation;
+  axisConfig: AxisConfig;
 }
 
-const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
+const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const targetOrientation = useRef({ x: 0, y: 0, z: 0 });
 
-  // Smoothly interpolate orientation
+  // Smoothly interpolate orientation with configurable axis mapping
   useFrame(() => {
     if (groupRef.current) {
-      // Convert orientation to radians (swapped X/Y and inverted both)
-      targetOrientation.current.x = orientation.y * (Math.PI / 180);
-      targetOrientation.current.y = orientation.z * (Math.PI / 180);
-      targetOrientation.current.z = -orientation.x * (Math.PI / 180);
+      // Get source values based on config
+      const sourceValues = { x: orientation.x, y: orientation.y, z: orientation.z };
+      
+      // Apply axis mapping and inversion
+      const xVal = sourceValues[axisConfig.xSource] * (axisConfig.xInvert ? -1 : 1);
+      const yVal = sourceValues[axisConfig.ySource] * (axisConfig.yInvert ? -1 : 1);
+      const zVal = sourceValues[axisConfig.zSource] * (axisConfig.zInvert ? -1 : 1);
+      
+      targetOrientation.current.x = xVal * (Math.PI / 180);
+      targetOrientation.current.y = yVal * (Math.PI / 180);
+      targetOrientation.current.z = zVal * (Math.PI / 180);
 
       // Smooth interpolation
       groupRef.current.rotation.x += (targetOrientation.current.x - groupRef.current.rotation.x) * 0.1;
@@ -207,9 +216,14 @@ interface RubiksCube3DProps {
 
 const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
+  const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
 
   useEffect(() => {
     setWebGLSupported(isWebGLAvailable());
+  }, []);
+
+  const handleAxisConfigChange = useCallback((config: AxisConfig) => {
+    setAxisConfig(config);
   }, []);
 
   if (!webGLSupported) {
@@ -227,7 +241,8 @@ const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
   }
 
   return (
-    <div className="w-full h-[400px] md:h-[500px]">
+    <div className="w-full h-[400px] md:h-[500px] relative">
+      <AxisCalibration onConfigChange={handleAxisConfigChange} />
       <Canvas
         camera={{ position: [4, 3, 4], fov: 45 }}
         gl={{ antialias: true, failIfMajorPerformanceCaveat: false }}
@@ -240,7 +255,7 @@ const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
         <directionalLight position={[-10, -10, -5]} intensity={0.3} />
         <pointLight position={[0, 10, 0]} intensity={0.5} />
         
-        <CubeGroup facelets={facelets} orientation={orientation} />
+        <CubeGroup facelets={facelets} orientation={orientation} axisConfig={axisConfig} />
         
         <OrbitControls 
           enablePan={false} 
