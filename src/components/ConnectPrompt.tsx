@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Bluetooth, Play, HelpCircle, X } from 'lucide-react';
+import { Bluetooth, Play, HelpCircle, X, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ConnectPromptProps {
-  onConnect: () => void;
+  onConnect: (mac?: string) => void;
   onDemoMode: () => void;
   isConnecting: boolean;
   error: string | null;
@@ -12,6 +12,7 @@ interface ConnectPromptProps {
   pendingDeviceName: string | null;
   onConfirmMacAddress: (mac: string) => void;
   onCancelConnection: () => void;
+  onClearMacAddress: () => void;
 }
 
 const ConnectPrompt = ({ 
@@ -24,9 +25,11 @@ const ConnectPrompt = ({
   pendingDeviceName,
   onConfirmMacAddress,
   onCancelConnection,
+  onClearMacAddress,
 }: ConnectPromptProps) => {
   const [macAddress, setMacAddress] = useState(savedMacAddress || '');
   const [showHelp, setShowHelp] = useState(false);
+  const [showMacInput, setShowMacInput] = useState(!savedMacAddress);
 
   const isValidMac = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(macAddress);
 
@@ -36,7 +39,24 @@ const ConnectPrompt = ({
     }
   };
 
-  // Show MAC address input modal if needed
+  const handleConnect = () => {
+    if (showMacInput && isValidMac) {
+      onConnect(macAddress);
+    } else if (savedMacAddress) {
+      onConnect(savedMacAddress);
+    } else {
+      // No MAC address, will prompt after device selection
+      onConnect();
+    }
+  };
+
+  const handleClearMac = () => {
+    setMacAddress('');
+    setShowMacInput(true);
+    onClearMacAddress();
+  };
+
+  // Show MAC address input modal if needed (during connection)
   if (needsMacAddress) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8">
@@ -140,20 +160,66 @@ const ConnectPrompt = ({
           </p>
         </div>
 
-        {/* Saved MAC indicator */}
-        {savedMacAddress && (
-          <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-success text-sm">
-            Saved MAC: <code className="font-mono">{savedMacAddress}</code>
+        {/* MAC Address Section */}
+        <div className="space-y-3 text-left p-4 rounded-xl bg-card/50 border border-border/50">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-foreground flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              MAC Address
+            </h3>
+            <button 
+              onClick={() => setShowHelp(!showHelp)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
           </div>
-        )}
+
+          {savedMacAddress && !showMacInput ? (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-success/10 border border-success/30">
+              <code className="text-success font-mono text-sm">{savedMacAddress}</code>
+              <button 
+                onClick={handleClearMac}
+                className="text-muted-foreground hover:text-foreground transition-colors text-sm"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={macAddress}
+                onChange={(e) => setMacAddress(e.target.value.toUpperCase())}
+                placeholder="XX:XX:XX:XX:XX:XX"
+                className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono text-sm"
+              />
+              {macAddress && !isValidMac && (
+                <p className="text-xs text-warning">Enter a valid MAC address (e.g., A1:B2:C3:D4:E5:F6)</p>
+              )}
+            </div>
+          )}
+
+          {showHelp && (
+            <div className="p-3 rounded-lg bg-muted/50 text-left space-y-2 animate-scale-in">
+              <p className="text-xs text-muted-foreground font-medium">How to find your MAC address:</p>
+              <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+                <li>Open Chrome: <code className="bg-muted px-1 rounded">chrome://bluetooth-internals</code></li>
+                <li>Click "Devices" tab</li>
+                <li>Find your cube (starts with "GAN")</li>
+                <li>Copy the MAC address</li>
+              </ol>
+            </div>
+          )}
+        </div>
 
         {/* Buttons */}
         <div className="space-y-3">
           <Button
             variant="hero"
             size="xl"
-            onClick={() => onConnect()}
-            disabled={isConnecting}
+            onClick={handleConnect}
+            disabled={isConnecting || (showMacInput && macAddress.length > 0 && !isValidMac)}
             className="w-full"
           >
             {isConnecting ? (
@@ -198,17 +264,6 @@ const ConnectPrompt = ({
             <li>GAN14 ui FreePlay, GAN Mini ui FreePlay</li>
             <li>Monster Go 3Ai, MoYu AI 2023</li>
           </ul>
-        </div>
-
-        {/* Quick Start */}
-        <div className="space-y-3 text-left p-4 rounded-xl bg-card/50 border border-border/50">
-          <h3 className="font-medium text-foreground">Quick Start:</h3>
-          <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-            <li>Wake up your GAN cube by making a few moves</li>
-            <li>Click "Connect Cube" and select your cube from the list</li>
-            <li>If prompted, enter your cube's MAC address</li>
-            <li>Start solving!</li>
-          </ol>
         </div>
 
         {/* Browser Support Note */}

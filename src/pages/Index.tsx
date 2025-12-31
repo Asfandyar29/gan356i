@@ -24,6 +24,7 @@ const CubeTracker = () => {
     pendingDeviceName,
     confirmMacAddress,
     cancelConnection,
+    clearMacAddress,
   } = useCubeConnection();
 
   const { time, timerState, startTimer, stopTimer, resetTimer, formattedTime } = useTimer();
@@ -120,6 +121,7 @@ const CubeTracker = () => {
         pendingDeviceName={pendingDeviceName}
         onConfirmMacAddress={confirmMacAddress}
         onCancelConnection={cancelConnection}
+        onClearMacAddress={clearMacAddress}
       />
     );
   }

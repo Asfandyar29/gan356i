@@ -23,6 +23,7 @@ interface UseCubeConnectionReturn {
   deviceName: string | null;
   macAddress: string | null;
   setMacAddress: (mac: string) => void;
+  clearMacAddress: () => void;
   needsMacAddress: boolean;
   pendingDeviceName: string | null;
   confirmMacAddress: (mac: string) => void;
@@ -73,7 +74,14 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [macAddress, setMacAddressState] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('ganCubeMac') || null;
+      const saved = localStorage.getItem('ganCubeMac');
+      // Validate that it's a proper MAC address string
+      if (saved && typeof saved === 'string' && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(saved)) {
+        return saved;
+      }
+      // Clear invalid value
+      localStorage.removeItem('ganCubeMac');
+      return null;
     }
     return null;
   });
@@ -97,6 +105,14 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     setMacAddressState(mac);
     if (typeof window !== 'undefined' && mac) {
       localStorage.setItem('ganCubeMac', mac);
+    }
+  }, []);
+
+  // Clear MAC address
+  const clearMacAddress = useCallback(() => {
+    setMacAddressState(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ganCubeMac');
     }
   }, []);
 
@@ -305,6 +321,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     deviceName,
     macAddress,
     setMacAddress,
+    clearMacAddress,
     needsMacAddress,
     pendingDeviceName,
     confirmMacAddress,
