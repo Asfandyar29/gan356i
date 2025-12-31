@@ -146,36 +146,36 @@ const CubeGroup = ({ facelets, orientation }: CubeGroupProps) => {
           // Check if this is a face center piece
           const isCenter = (x === 1 && y === 1) || (y === 1 && z === 1) || (x === 1 && z === 1);
 
-          // Assign colors based on position
-          // Right face (x = 2)
+          // Assign colors based on position (swapped to match physical cube orientation)
+          // Right face (x = 2) - now shows Orange (was Red)
           if (x === 2) {
-            const idx = 9 + (2-y) * 3 + (2-z);
-            colors[0] = facelets[idx] || 'red';
-          }
-          // Left face (x = 0)
-          if (x === 0) {
             const idx = 36 + (2-y) * 3 + z;
-            colors[1] = facelets[idx] || 'orange';
+            colors[0] = facelets[idx] || 'orange';
           }
-          // Up face (y = 0)
+          // Left face (x = 0) - now shows Red (was Orange)
+          if (x === 0) {
+            const idx = 9 + (2-y) * 3 + (2-z);
+            colors[1] = facelets[idx] || 'red';
+          }
+          // Up face (y = 0) - now shows Yellow (was White)
           if (y === 0) {
-            const idx = z * 3 + x;
-            colors[2] = facelets[idx] || 'white';
-          }
-          // Down face (y = 2)
-          if (y === 2) {
             const idx = 27 + (2-z) * 3 + x;
-            colors[3] = facelets[idx] || 'yellow';
+            colors[2] = facelets[idx] || 'yellow';
           }
-          // Front face (z = 0)
+          // Down face (y = 2) - now shows White (was Yellow)
+          if (y === 2) {
+            const idx = z * 3 + x;
+            colors[3] = facelets[idx] || 'white';
+          }
+          // Front face (z = 0) - now shows Blue (was Green)
           if (z === 0) {
-            const idx = 18 + (2-y) * 3 + x;
-            colors[4] = facelets[idx] || 'green';
-          }
-          // Back face (z = 2)
-          if (z === 2) {
             const idx = 45 + (2-y) * 3 + (2-x);
-            colors[5] = facelets[idx] || 'blue';
+            colors[4] = facelets[idx] || 'blue';
+          }
+          // Back face (z = 2) - now shows Green (was Blue)
+          if (z === 2) {
+            const idx = 18 + (2-y) * 3 + x;
+            colors[5] = facelets[idx] || 'green';
           }
 
           result.push({ position, colors, isCenter });
