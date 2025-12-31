@@ -152,7 +152,7 @@ const ConnectPrompt = ({
           <Button
             variant="hero"
             size="xl"
-            onClick={onConnect}
+            onClick={() => onConnect()}
             disabled={isConnecting}
             className="w-full"
           >
@@ -174,7 +174,7 @@ const ConnectPrompt = ({
           <Button
             variant="glass"
             size="lg"
-            onClick={onDemoMode}
+            onClick={() => onDemoMode()}
             className="w-full"
           >
             <Play className="w-4 h-4" />
