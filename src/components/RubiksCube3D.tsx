@@ -110,29 +110,61 @@ interface CubeGroupProps {
   axisConfig: AxisConfig;
 }
 
+// Normalize angle to prevent sudden jumps (keeps angle in -180 to 180 range)
+const normalizeAngle = (angle: number): number => {
+  while (angle > 180) angle -= 360;
+  while (angle < -180) angle += 360;
+  return angle;
+};
+
+// Smooth angle interpolation that handles wraparound
+const lerpAngle = (current: number, target: number, factor: number): number => {
+  let diff = target - current;
+  
+  // Handle wraparound - take the shortest path
+  if (diff > Math.PI) diff -= 2 * Math.PI;
+  if (diff < -Math.PI) diff += 2 * Math.PI;
+  
+  return current + diff * factor;
+};
+
 const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
-  const targetOrientation = useRef({ x: 0, y: 0, z: 0 });
+  const currentRotation = useRef({ x: 0, y: 0, z: 0 });
 
   // Smoothly interpolate orientation with configurable axis mapping
   useFrame(() => {
     if (groupRef.current) {
+      if (!axisConfig.gyroEnabled) {
+        // When gyro is disabled, don't update rotation from orientation
+        return;
+      }
+
       // Get source values based on config
       const sourceValues = { x: orientation.x, y: orientation.y, z: orientation.z };
       
-      // Apply axis mapping and inversion
-      const xVal = sourceValues[axisConfig.xSource] * (axisConfig.xInvert ? -1 : 1);
-      const yVal = sourceValues[axisConfig.ySource] * (axisConfig.yInvert ? -1 : 1);
-      const zVal = sourceValues[axisConfig.zSource] * (axisConfig.zInvert ? -1 : 1);
+      // Apply axis mapping, offsets, and inversion
+      let xVal = (sourceValues[axisConfig.xSource] + axisConfig.offsetX) * (axisConfig.xInvert ? -1 : 1);
+      let yVal = (sourceValues[axisConfig.ySource] + axisConfig.offsetY) * (axisConfig.yInvert ? -1 : 1);
+      let zVal = (sourceValues[axisConfig.zSource] + axisConfig.offsetZ) * (axisConfig.zInvert ? -1 : 1);
       
-      targetOrientation.current.x = xVal * (Math.PI / 180);
-      targetOrientation.current.y = yVal * (Math.PI / 180);
-      targetOrientation.current.z = zVal * (Math.PI / 180);
+      // Normalize angles to prevent sudden jumps
+      xVal = normalizeAngle(xVal);
+      yVal = normalizeAngle(yVal);
+      zVal = normalizeAngle(zVal);
+      
+      const targetX = xVal * (Math.PI / 180);
+      const targetY = yVal * (Math.PI / 180);
+      const targetZ = zVal * (Math.PI / 180);
 
-      // Smooth interpolation
-      groupRef.current.rotation.x += (targetOrientation.current.x - groupRef.current.rotation.x) * 0.1;
-      groupRef.current.rotation.y += (targetOrientation.current.y - groupRef.current.rotation.y) * 0.1;
-      groupRef.current.rotation.z += (targetOrientation.current.z - groupRef.current.rotation.z) * 0.1;
+      // Smooth interpolation with angle wraparound handling
+      currentRotation.current.x = lerpAngle(currentRotation.current.x, targetX, 0.15);
+      currentRotation.current.y = lerpAngle(currentRotation.current.y, targetY, 0.15);
+      currentRotation.current.z = lerpAngle(currentRotation.current.z, targetZ, 0.15);
+
+      groupRef.current.rotation.x = currentRotation.current.x;
+      groupRef.current.rotation.y = currentRotation.current.y;
+      groupRef.current.rotation.z = currentRotation.current.z;
     }
   });
 
@@ -242,7 +274,10 @@ const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
 
   return (
     <div className="w-full h-[400px] md:h-[500px] relative">
-      <AxisCalibration onConfigChange={handleAxisConfigChange} />
+      <AxisCalibration 
+        onConfigChange={handleAxisConfigChange} 
+        currentOrientation={orientation}
+      />
       <Canvas
         camera={{ position: [4, 3, 4], fov: 45 }}
         gl={{ antialias: true, failIfMajorPerformanceCaveat: false }}
