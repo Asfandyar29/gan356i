@@ -128,10 +128,9 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
       case 'MOVE':
         moveCountRef.current++;
-        // Swap F↔B and L↔R to match virtual cube orientation
-        // Original: URFDLB (indices 0=U, 1=R, 2=F, 3=D, 4=L, 5=B)
-        // Swapped:  ULBDRF (F↔B at indices 2↔5, L↔R at indices 1↔4)
-        const faceMapping = 'ULBDRF';
+        // Face mapping: indices 0=U, 1=R, 2=F, 3=D, 4=L, 5=B
+        // Physical cube sends these indices, map directly to virtual faces
+        const faceMapping = 'URFDLB';
         const face = faceMapping.charAt(event.face) as CubeFace;
         const moveEvent: MoveEvent = {
           face,
