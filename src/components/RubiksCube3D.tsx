@@ -188,34 +188,34 @@ const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
           const isCenter = (x === 1 && y === 1) || (y === 1 && z === 1) || (x === 1 && z === 1);
 
           // Assign colors based on position (swapped to match physical cube orientation)
-          // Right face (x = 2) - now shows Orange (was Red)
+          // Right face (x = 2) - Orange face
           if (x === 2) {
-            const idx = 36 + (2-y) * 3 + (2-z);
+            const idx = 36 + (2-y) * 3 + z;
             colors[0] = facelets[idx] || 'orange';
           }
-          // Left face (x = 0) - now shows Red (was Orange)
+          // Left face (x = 0) - Red face
           if (x === 0) {
-            const idx = 9 + (2-y) * 3 + z;
+            const idx = 9 + (2-y) * 3 + (2-z);
             colors[1] = facelets[idx] || 'red';
           }
-          // Up face (y = 0) - now shows Yellow (was White)
+          // Up face (y = 0) - Yellow
           if (y === 0) {
             const idx = 27 + (2-z) * 3 + x;
             colors[2] = facelets[idx] || 'yellow';
           }
-          // Down face (y = 2) - now shows White (was Yellow)
+          // Down face (y = 2) - White
           if (y === 2) {
             const idx = z * 3 + x;
             colors[3] = facelets[idx] || 'white';
           }
-          // Front face (z = 0) - now shows Green (swapped with Blue)
+          // Front face (z = 0) - Green
           if (z === 0) {
-            const idx = 18 + (2-y) * 3 + (2-x);
+            const idx = 18 + (2-y) * 3 + x;
             colors[4] = facelets[idx] || 'green';
           }
-          // Back face (z = 2) - now shows Blue (swapped with Green)
+          // Back face (z = 2) - Blue
           if (z === 2) {
-            const idx = 45 + (2-y) * 3 + x;
+            const idx = 45 + (2-y) * 3 + (2-x);
             colors[5] = facelets[idx] || 'blue';
           }
 
