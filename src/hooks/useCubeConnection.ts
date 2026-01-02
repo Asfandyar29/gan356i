@@ -32,14 +32,16 @@ interface UseCubeConnectionReturn {
 
 // Convert Kociemba notation facelets string to our color array
 // Kociemba format: UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB
+// But GAN cube has L↔R and F↔B swapped relative to our virtual orientation
+// So we swap: R↔L and F↔B in the color mapping
 const kociembaToFacelets = (kociemba: string): Facelets => {
   const colorMap: Record<string, CubeColor> = {
-    'U': 'white',   // Up = White
-    'R': 'red',     // Right = Red
-    'F': 'green',   // Front = Green
-    'D': 'yellow',  // Down = Yellow
-    'L': 'orange',  // Left = Orange
-    'B': 'blue',    // Back = Blue
+    'U': 'white',   // Up = White (correct)
+    'R': 'orange',  // GAN's R is our L (Orange) - SWAPPED
+    'F': 'blue',    // GAN's F is our B (Blue) - SWAPPED
+    'D': 'yellow',  // Down = Yellow (correct)
+    'L': 'red',     // GAN's L is our R (Red) - SWAPPED
+    'B': 'green',   // GAN's B is our F (Green) - SWAPPED
   };
   
   return kociemba.split('').map(c => colorMap[c] || 'white') as Facelets;
@@ -128,9 +130,13 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
       case 'MOVE':
         moveCountRef.current++;
-        // Face mapping: indices 0=U, 1=R, 2=F, 3=D, 4=L, 5=B
-        // Physical cube sends these indices, map directly to virtual faces
-        const faceMapping = 'URFDLB';
+        // Face mapping from GAN cube indices to virtual faces
+        // GAN sends: 0=U, 1=R, 2=F, 3=D, 4=L, 5=B (standard)
+        // But physical R (orange) maps to virtual L, physical L (red) maps to virtual R
+        // And physical F (blue) maps to virtual B, physical B (green) maps to virtual F
+        // So we swap: index 1↔4 (R↔L) and index 2↔5 (F↔B)
+        // Result: U at 0, L at 1, B at 2, D at 3, R at 4, F at 5
+        const faceMapping = 'ULBDRF';
         const face = faceMapping.charAt(event.face) as CubeFace;
         const moveEvent: MoveEvent = {
           face,
