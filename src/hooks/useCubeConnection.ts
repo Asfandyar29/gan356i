@@ -139,9 +139,9 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
         const faceMapping = 'ULBDRF';
         const face = faceMapping.charAt(event.face) as CubeFace;
         
-        // For L and R moves, direction also needs to be inverted because we swapped the faces
-        // When physical R (which we map to L) rotates clockwise, virtual L should rotate counterclockwise
-        const needsDirectionInvert = face === 'L' || face === 'R';
+        // For L, R, F, B moves, direction needs to be inverted because we swapped the faces
+        // When physical face rotates clockwise, virtual face should rotate counterclockwise
+        const needsDirectionInvert = face === 'L' || face === 'R' || face === 'F' || face === 'B';
         const baseDirection: 1 | -1 = event.direction === 0 ? 1 : -1;
         const direction: 1 | -1 = needsDirectionInvert ? (-baseDirection as 1 | -1) : baseDirection;
         
