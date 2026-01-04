@@ -130,17 +130,26 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       case 'MOVE':
         moveCountRef.current++;
         // GAN sends: 0=U, 1=R, 2=F, 3=D, 4=L, 5=B (standard Kociemba order)
-        // Use standard face mapping directly
         const faceMapping = 'URFDLB';
         const face = faceMapping.charAt(event.face) as CubeFace;
         
         // Direction: 0 = CW (clockwise), 1 = CCW (counter-clockwise)
-        const direction: 1 | -1 = event.direction === 0 ? 1 : -1;
+        // For L, R, F, B faces we need to invert the direction to match visual rotation
+        let direction: 1 | -1 = event.direction === 0 ? 1 : -1;
+        if (face === 'L' || face === 'R' || face === 'F' || face === 'B') {
+          direction = direction === 1 ? -1 : 1;
+        }
+        
+        // Build the correct notation with the inverted direction
+        let notation = face;
+        if (direction === -1) {
+          notation += "'";
+        }
         
         const moveEvent: MoveEvent = {
           face,
           direction,
-          notation: event.move,
+          notation,
           timestamp: event.timestamp,
         };
         setCubeState(prev => ({

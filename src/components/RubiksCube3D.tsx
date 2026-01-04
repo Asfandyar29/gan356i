@@ -2,7 +2,7 @@ import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { Facelets, CubeColor, CubeOrientation } from '@/types/cube';
+import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
 
 // Check WebGL support
@@ -32,14 +32,26 @@ interface CubeletProps {
   position: [number, number, number];
   colors: (CubeColor | null)[];
   isCenter?: boolean;
+  animationRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
 }
 
-const Cubelet = ({ position, colors, isCenter = false }: CubeletProps) => {
+const Cubelet = ({ position, colors, isCenter = false, animationRotation }: CubeletProps) => {
+  const groupRef = useRef<THREE.Group>(null);
   const size = 0.95;
   const stickerOffset = 0.48;
   const stickerSize = 0.82;
   const stickerThickness = 0.015;
   const stickerRadius = 0.1;
+
+  // Apply animation rotation
+  useFrame(() => {
+    if (groupRef.current && animationRotation) {
+      const { axis, angle } = animationRotation;
+      if (axis === 'x') groupRef.current.rotation.x = angle;
+      else if (axis === 'y') groupRef.current.rotation.y = angle;
+      else if (axis === 'z') groupRef.current.rotation.z = angle;
+    }
+  });
 
   // Face directions: +X, -X, +Y, -Y, +Z, -Z (R, L, U, D, F, B)
   const faceDirections: [number, number, number][] = [
@@ -61,7 +73,7 @@ const Cubelet = ({ position, colors, isCenter = false }: CubeletProps) => {
   ];
 
   return (
-    <group position={position}>
+    <group ref={groupRef} position={position}>
       {/* Black cube body */}
       <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
         <meshStandardMaterial color="#1a1a1a" />
@@ -104,10 +116,17 @@ const Cubelet = ({ position, colors, isCenter = false }: CubeletProps) => {
   );
 };
 
+interface AnimatingLayer {
+  face: string;
+  direction: 1 | -1;
+  progress: number;
+}
+
 interface CubeGroupProps {
   facelets: Facelets;
   orientation: CubeOrientation;
   axisConfig: AxisConfig;
+  lastMove: MoveEvent | null;
 }
 
 // Normalize angle to prevent sudden jumps (keeps angle in -180 to 180 range)
@@ -128,15 +147,65 @@ const lerpAngle = (current: number, target: number, factor: number): number => {
   return current + diff * factor;
 };
 
-const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
+// Get which cubelets belong to which face for animation
+const getCubeletsForFace = (face: string): { x: number; y: number; z: number }[] => {
+  const cubelets: { x: number; y: number; z: number }[] = [];
+  const offsets = [-1, 0, 1];
+  
+  for (let y = 0; y < 3; y++) {
+    for (let z = 0; z < 3; z++) {
+      for (let x = 0; x < 3; x++) {
+        if (x === 1 && y === 1 && z === 1) continue;
+        
+        const pos = { x: offsets[x], y: offsets[2-y], z: offsets[2-z] };
+        
+        switch (face) {
+          case 'U': if (pos.y === 1) cubelets.push(pos); break;
+          case 'D': if (pos.y === -1) cubelets.push(pos); break;
+          case 'R': if (pos.x === 1) cubelets.push(pos); break;
+          case 'L': if (pos.x === -1) cubelets.push(pos); break;
+          case 'F': if (pos.z === 1) cubelets.push(pos); break;
+          case 'B': if (pos.z === -1) cubelets.push(pos); break;
+        }
+      }
+    }
+  }
+  return cubelets;
+};
+
+const CubeGroup = ({ facelets, orientation, axisConfig, lastMove }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const currentRotation = useRef({ x: 0, y: 0, z: 0 });
+  const [animatingLayer, setAnimatingLayer] = useState<AnimatingLayer | null>(null);
+  const animationProgress = useRef(0);
+  const lastMoveTimestamp = useRef<number | null>(null);
+
+  // Trigger animation when a new move occurs
+  useEffect(() => {
+    if (lastMove && lastMove.timestamp !== lastMoveTimestamp.current) {
+      lastMoveTimestamp.current = lastMove.timestamp;
+      setAnimatingLayer({
+        face: lastMove.face,
+        direction: lastMove.direction,
+        progress: 0,
+      });
+      animationProgress.current = 0;
+    }
+  }, [lastMove]);
 
   // Smoothly interpolate orientation with configurable axis mapping
-  useFrame(() => {
+  useFrame((_, delta) => {
+    // Handle layer animation
+    if (animatingLayer) {
+      animationProgress.current += delta * 8; // Animation speed
+      if (animationProgress.current >= 1) {
+        setAnimatingLayer(null);
+        animationProgress.current = 0;
+      }
+    }
+
     if (groupRef.current) {
       if (!axisConfig.gyroEnabled) {
-        // When gyro is disabled, don't update rotation from orientation
         return;
       }
 
@@ -234,6 +303,39 @@ const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
     return result;
   }, [facelets]);
 
+  // Calculate animation rotation for each cubelet
+  const getAnimationRotation = (position: [number, number, number]) => {
+    if (!animatingLayer) return null;
+    
+    const { face, direction } = animatingLayer;
+    const [x, y, z] = position;
+    
+    // Check if this cubelet is part of the animating layer
+    const isPartOfLayer = 
+      (face === 'U' && y === 1) ||
+      (face === 'D' && y === -1) ||
+      (face === 'R' && x === 1) ||
+      (face === 'L' && x === -1) ||
+      (face === 'F' && z === 1) ||
+      (face === 'B' && z === -1);
+    
+    if (!isPartOfLayer) return null;
+    
+    // Calculate the rotation angle with easing
+    const progress = Math.min(animationProgress.current, 1);
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    const targetAngle = direction * (Math.PI / 2);
+    const angle = targetAngle * easeOut;
+    
+    // Determine rotation axis
+    let axis: 'x' | 'y' | 'z' = 'y';
+    if (face === 'R' || face === 'L') axis = 'x';
+    else if (face === 'U' || face === 'D') axis = 'y';
+    else if (face === 'F' || face === 'B') axis = 'z';
+    
+    return { axis, angle };
+  };
+
   return (
     <group ref={groupRef}>
       {cubelets.map((cubelet, index) => (
@@ -242,6 +344,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
           position={cubelet.position} 
           colors={cubelet.colors}
           isCenter={cubelet.isCenter}
+          animationRotation={getAnimationRotation(cubelet.position)}
         />
       ))}
     </group>
@@ -251,9 +354,10 @@ const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
 interface RubiksCube3DProps {
   facelets: Facelets;
   orientation: CubeOrientation;
+  lastMove?: MoveEvent | null;
 }
 
-const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
+const RubiksCube3D = ({ facelets, orientation, lastMove = null }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
 
@@ -297,7 +401,7 @@ const RubiksCube3D = ({ facelets, orientation }: RubiksCube3DProps) => {
         <directionalLight position={[-10, -10, -5]} intensity={0.3} />
         <pointLight position={[0, 10, 0]} intensity={0.5} />
         
-        <CubeGroup facelets={facelets} orientation={orientation} axisConfig={axisConfig} />
+        <CubeGroup facelets={facelets} orientation={orientation} axisConfig={axisConfig} lastMove={lastMove} />
         
         <OrbitControls 
           enablePan={false} 
