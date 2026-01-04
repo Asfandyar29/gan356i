@@ -207,7 +207,8 @@ const CubeTracker = () => {
             }>
               <RubiksCube3D 
                 facelets={activeState.facelets} 
-                orientation={activeState.orientation} 
+                orientation={activeState.orientation}
+                lastMove={activeState.lastMove}
               />
             </Suspense>
           </div>

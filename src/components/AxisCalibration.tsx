@@ -17,13 +17,17 @@ export interface AxisConfig {
   offsetZ: number;
 }
 
+// Default config based on user's working settings:
+// Pitch (X) = Gyro X, Inverted
+// Yaw (Y) = Gyro Z, Normal  
+// Roll (Z) = Gyro Y, Inverted
 const defaultConfig: AxisConfig = {
   xSource: 'x',
-  ySource: 'y',
-  zSource: 'z',
-  xInvert: false,
+  ySource: 'z',
+  zSource: 'y',
+  xInvert: true,
   yInvert: false,
-  zInvert: false,
+  zInvert: true,
   gyroEnabled: true,
   offsetX: 0,
   offsetY: 0,
