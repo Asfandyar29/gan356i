@@ -32,16 +32,15 @@ interface UseCubeConnectionReturn {
 
 // Convert Kociemba notation facelets string to our color array
 // Kociemba format: UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB
-// But GAN cube has L↔R and F↔B swapped relative to our virtual orientation
-// So we swap: R↔L and F↔B in the color mapping
+// Standard color scheme: U=White, R=Red, F=Green, D=Yellow, L=Orange, B=Blue
 const kociembaToFacelets = (kociemba: string): Facelets => {
   const colorMap: Record<string, CubeColor> = {
-    'U': 'white',   // Up = White (correct)
-    'R': 'orange',  // GAN's R is our L (Orange) - SWAPPED
-    'F': 'blue',    // GAN's F is our B (Blue) - SWAPPED
-    'D': 'yellow',  // Down = Yellow (correct)
-    'L': 'red',     // GAN's L is our R (Red) - SWAPPED
-    'B': 'green',   // GAN's B is our F (Green) - SWAPPED
+    'U': 'white',
+    'R': 'red',
+    'F': 'green',
+    'D': 'yellow',
+    'L': 'orange',
+    'B': 'blue',
   };
   
   return kociemba.split('').map(c => colorMap[c] || 'white') as Facelets;
@@ -130,20 +129,13 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
       case 'MOVE':
         moveCountRef.current++;
-        // Face mapping from GAN cube indices to virtual faces
-        // GAN sends: 0=U, 1=R, 2=F, 3=D, 4=L, 5=B (standard)
-        // But physical R (orange) maps to virtual L, physical L (red) maps to virtual R
-        // And physical F (blue) maps to virtual B, physical B (green) maps to virtual F
-        // So we swap: index 1↔4 (R↔L) and index 2↔5 (F↔B)
-        // Result: U at 0, L at 1, B at 2, D at 3, R at 4, F at 5
-        const faceMapping = 'ULBDRF';
+        // GAN sends: 0=U, 1=R, 2=F, 3=D, 4=L, 5=B (standard Kociemba order)
+        // Use standard face mapping directly
+        const faceMapping = 'URFDLB';
         const face = faceMapping.charAt(event.face) as CubeFace;
         
-        // For L, R, F, B moves, direction needs to be inverted because we swapped the faces
-        // When physical face rotates clockwise, virtual face should rotate counterclockwise
-        const needsDirectionInvert = face === 'L' || face === 'R' || face === 'F' || face === 'B';
-        const baseDirection: 1 | -1 = event.direction === 0 ? 1 : -1;
-        const direction: 1 | -1 = needsDirectionInvert ? (-baseDirection as 1 | -1) : baseDirection;
+        // Direction: 0 = CW (clockwise), 1 = CCW (counter-clockwise)
+        const direction: 1 | -1 = event.direction === 0 ? 1 : -1;
         
         const moveEvent: MoveEvent = {
           face,
