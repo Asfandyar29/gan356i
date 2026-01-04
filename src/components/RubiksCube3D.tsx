@@ -187,35 +187,42 @@ const CubeGroup = ({ facelets, orientation, axisConfig }: CubeGroupProps) => {
           // Check if this is a face center piece
           const isCenter = (x === 1 && y === 1) || (y === 1 && z === 1) || (x === 1 && z === 1);
 
-          // Assign colors based on position (flipped to match physical cube rotation direction)
-          // Right face (x = 2) - Orange face - flip z to invert rotation
+          // Kociemba facelet indices:
+          // U: 0-8 (White, top)
+          // R: 9-17 (Red, right)
+          // F: 18-26 (Green, front)
+          // D: 27-35 (Yellow, bottom)
+          // L: 36-44 (Orange, left)
+          // B: 45-53 (Blue, back)
+          
+          // Right face (x = 2) - Red (R face: indices 9-17)
           if (x === 2) {
-            const idx = 36 + (2-y) * 3 + (2-z);
-            colors[0] = facelets[idx] || 'orange';
+            const idx = 9 + (2-y) * 3 + (2-z);
+            colors[0] = facelets[idx] || 'red';
           }
-          // Left face (x = 0) - Red face - flip z to invert rotation
+          // Left face (x = 0) - Orange (L face: indices 36-44)
           if (x === 0) {
-            const idx = 9 + (2-y) * 3 + z;
-            colors[1] = facelets[idx] || 'red';
+            const idx = 36 + (2-y) * 3 + z;
+            colors[1] = facelets[idx] || 'orange';
           }
-          // Up face (y = 0) - Yellow
+          // Up face (y = 0) - White (U face: indices 0-8)
           if (y === 0) {
-            const idx = 27 + (2-z) * 3 + x;
-            colors[2] = facelets[idx] || 'yellow';
+            const idx = 0 + (2-z) * 3 + x;
+            colors[2] = facelets[idx] || 'white';
           }
-          // Down face (y = 2) - White
+          // Down face (y = 2) - Yellow (D face: indices 27-35)
           if (y === 2) {
-            const idx = z * 3 + x;
-            colors[3] = facelets[idx] || 'white';
+            const idx = 27 + z * 3 + x;
+            colors[3] = facelets[idx] || 'yellow';
           }
-          // Front face (z = 0) - Green - flip x to invert rotation
+          // Front face (z = 0) - Green (F face: indices 18-26)
           if (z === 0) {
-            const idx = 18 + (2-y) * 3 + (2-x);
+            const idx = 18 + (2-y) * 3 + x;
             colors[4] = facelets[idx] || 'green';
           }
-          // Back face (z = 2) - Blue - flip x to invert rotation
+          // Back face (z = 2) - Blue (B face: indices 45-53)
           if (z === 2) {
-            const idx = 45 + (2-y) * 3 + x;
+            const idx = 45 + (2-y) * 3 + (2-x);
             colors[5] = facelets[idx] || 'blue';
           }
 
