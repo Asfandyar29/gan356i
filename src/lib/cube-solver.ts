@@ -44,41 +44,54 @@ export const applyMove = (facelets: Facelets, move: MoveEvent['face'], direction
 const match = (facelets: Facelets, idx: number, centerIdx: number) => facelets[idx] === facelets[centerIdx];
 
 // --- D Face CFOP (Yellow Cross) ---
+// --- D Face CFOP (Yellow Cross) ---
 export const checkCrossD = (f: Facelets): boolean => {
-    // D-F: D28, F25
-    if (!match(f, 28, CENTER_D) || !match(f, 25, CENTER_F)) return false;
-    // D-R: D32, R16
-    if (!match(f, 32, CENTER_D) || !match(f, 16, CENTER_R)) return false;
-    // D-B: D34, B52
-    if (!match(f, 34, CENTER_D) || !match(f, 52, CENTER_B)) return false;
-    // D-L: D30, L43
-    if (!match(f, 30, CENTER_D) || !match(f, 43, CENTER_L)) return false;
+    // Check side matches first (must match side centers)
+    if (!match(f, 25, CENTER_F)) return false; // F side
+    if (!match(f, 16, CENTER_R)) return false; // R side
+    if (!match(f, 52, CENTER_B)) return false; // B side
+    if (!match(f, 43, CENTER_L)) return false; // L side
+
+    // Check if D edges are uniform color
+    const c = f[28]; // Reference color
+    if (f[32] !== c || f[34] !== c || f[30] !== c) return false;
+
     return true;
 };
 
 export const checkF2LD = (f: Facelets): boolean => {
     if (!checkCrossD(f)) return false;
+    const dColor = f[28]; // Derived D color
+
     // Pairs
-    // FR: D29, F26, R15. Edge F23, R12.
-    if (!match(f, 29, CENTER_D) || !match(f, 26, CENTER_F) || !match(f, 15, CENTER_R)) return false;
+    // FR: D29 (Corner), F26 (Corner), R15 (Corner). Edge F23, R12.
+    // Corner D sticker must match D color. Side stickers match centers.
+    if (f[29] !== dColor || !match(f, 26, CENTER_F) || !match(f, 15, CENTER_R)) return false;
+    // Edge: match centers
     if (!match(f, 23, CENTER_F) || !match(f, 12, CENTER_R)) return false;
-    // RB: D35, B51, R17. Edge B48, R14.
-    if (!match(f, 35, CENTER_D) || !match(f, 51, CENTER_B) || !match(f, 17, CENTER_R)) return false;
+
+    // RB
+    if (f[35] !== dColor || !match(f, 51, CENTER_B) || !match(f, 17, CENTER_R)) return false;
     if (!match(f, 48, CENTER_B) || !match(f, 14, CENTER_R)) return false;
-    // BL: D33, B53, L42. Edge B50, L39.
-    if (!match(f, 33, CENTER_D) || !match(f, 53, CENTER_B) || !match(f, 42, CENTER_L)) return false;
+
+    // BL
+    if (f[33] !== dColor || !match(f, 53, CENTER_B) || !match(f, 42, CENTER_L)) return false;
     if (!match(f, 50, CENTER_B) || !match(f, 39, CENTER_L)) return false;
-    // LF: D27, F24, L44. Edge F21, L41.
-    if (!match(f, 27, CENTER_D) || !match(f, 24, CENTER_F) || !match(f, 44, CENTER_L)) return false;
+
+    // LF
+    if (f[27] !== dColor || !match(f, 24, CENTER_F) || !match(f, 44, CENTER_L)) return false;
     if (!match(f, 21, CENTER_F) || !match(f, 41, CENTER_L)) return false;
     return true;
 };
 
 export const checkOLLD = (f: Facelets): boolean => {
-    // If solving D cross, OLL is on U
     if (!checkF2LD(f)) return false;
-    const uColor = f[CENTER_U];
-    for (let i = 0; i < 9; i++) {
+    // OLL on U face. All U stickers must be same color (uniformity).
+    // We don't care IF it matches U-Center (could be center swap).
+    // But typically OLL means "Top color matches".
+    // Let's assume uniformity is enough.
+    const uColor = f[0]; // Reference top-left
+    for (let i = 1; i < 9; i++) {
         if (f[i] !== uColor) return false;
     }
     return true;
@@ -87,44 +100,46 @@ export const checkOLLD = (f: Facelets): boolean => {
 
 // --- U Face CFOP (White Cross) ---
 export const checkCrossU = (f: Facelets): boolean => {
-    // U-B (Top, 1): U1, B46
-    if (!match(f, 1, CENTER_U) || !match(f, 46, CENTER_B)) return false;
-    // U-L (Left, 3): U3, L37
-    if (!match(f, 3, CENTER_U) || !match(f, 37, CENTER_L)) return false;
-    // U-R (Right, 5): U5, R10
-    if (!match(f, 5, CENTER_U) || !match(f, 10, CENTER_R)) return false;
-    // U-F (Bottom, 7): U7, F19
-    if (!match(f, 7, CENTER_U) || !match(f, 19, CENTER_F)) return false;
+    // Side matches
+    if (!match(f, 46, CENTER_B)) return false;
+    if (!match(f, 37, CENTER_L)) return false;
+    if (!match(f, 10, CENTER_R)) return false;
+    if (!match(f, 19, CENTER_F)) return false;
+
+    // U Uniformity
+    const c = f[1];
+    if (f[3] !== c || f[5] !== c || f[7] !== c) return false;
     return true;
 };
 
 export const checkF2LU = (f: Facelets): boolean => {
     if (!checkCrossU(f)) return false;
+    const uColor = f[1]; // Derived U color
+
     // Pairs (Corners are 0,2,6,8 on U face)
-    // BL (U0): U0, B47, L36. Edge B50, L39 (Wait, edges are Middle layer: B50/L39 is middle? L top is 36,37,38. L mid is 39,40,41. B mid is 48,49,50. Yes.)
-    if (!match(f, 0, CENTER_U) || !match(f, 47, CENTER_B) || !match(f, 36, CENTER_L)) return false;
+    // BL
+    if (f[0] !== uColor || !match(f, 47, CENTER_B) || !match(f, 36, CENTER_L)) return false;
     if (!match(f, 50, CENTER_B) || !match(f, 39, CENTER_L)) return false;
 
-    // BR (U2): U2, B45, R11. Edge B48, R14.
-    if (!match(f, 2, CENTER_U) || !match(f, 45, CENTER_B) || !match(f, 11, CENTER_R)) return false;
+    // BR
+    if (f[2] !== uColor || !match(f, 45, CENTER_B) || !match(f, 11, CENTER_R)) return false;
     if (!match(f, 48, CENTER_B) || !match(f, 14, CENTER_R)) return false;
 
-    // FL (U6): U6, F18, L38. Edge F21, L41. (Wait, L top-right is 38? L is 36-38 Top. L38 is L-Top-Right. Touches F-Top-Left F18. Correct.)
-    if (!match(f, 6, CENTER_U) || !match(f, 18, CENTER_F) || !match(f, 38, CENTER_L)) return false;
+    // FL
+    if (f[6] !== uColor || !match(f, 18, CENTER_F) || !match(f, 38, CENTER_L)) return false;
     if (!match(f, 21, CENTER_F) || !match(f, 41, CENTER_L)) return false;
 
-    // FR (U8): U8, F20, R9. Edge F23, R12.
-    if (!match(f, 8, CENTER_U) || !match(f, 20, CENTER_F) || !match(f, 9, CENTER_R)) return false;
+    // FR
+    if (f[8] !== uColor || !match(f, 20, CENTER_F) || !match(f, 9, CENTER_R)) return false;
     if (!match(f, 23, CENTER_F) || !match(f, 12, CENTER_R)) return false;
 
     return true;
 };
 
 export const checkOLLU = (f: Facelets): boolean => {
-    // If solving U cross, OLL is on D
     if (!checkF2LU(f)) return false;
-    const dColor = f[CENTER_D];
-    for (let i = 27; i < 36; i++) {
+    const dColor = f[27]; // Reference D
+    for (let i = 28; i < 36; i++) {
         if (f[i] !== dColor) return false;
     }
     return true;
@@ -135,11 +150,12 @@ export const checkCross = (f: Facelets): boolean => checkCrossD(f) || checkCross
 export const checkF2L = (f: Facelets): boolean => checkF2LD(f) || checkF2LU(f);
 export const checkOLL = (f: Facelets): boolean => checkOLLD(f) || checkOLLU(f);
 export const checkPLL = (f: Facelets): boolean => {
-    // All faces solved matches all centers
+    // All faces solved.
+    // Check if each face is uniform.
     for (let faceStart = 0; faceStart < 54; faceStart += 9) {
-        const center = faceStart + 4;
-        for (let i = 0; i < 9; i++) {
-            if (f[faceStart + i] !== f[center]) return false;
+        const faceColor = f[faceStart];
+        for (let i = 1; i < 9; i++) {
+            if (f[faceStart + i] !== faceColor) return false;
         }
     }
     return true;

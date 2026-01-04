@@ -281,7 +281,8 @@ const CubeTracker = () => {
         if (activeState.lastMove) {
           solveMetaData.current = {
             index: Math.max(0, activeState.moveHistory.length - 1),
-            time: activeState.lastMove.timestamp
+            time: activeState.lastMove.timestamp,
+            scramble: scramble // Capture current scramble
           };
 
           // START TIMER
@@ -301,14 +302,11 @@ const CubeTracker = () => {
 
       const history = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
+      const solveScramble = solveMetaData.current.scramble.length > 0 ? solveMetaData.current.scramble : scramble;
 
-      // We pass the ORIGINAL scramble (before flattening) or flattened?
-      // `analyzeSolve` expects string array. `scramble` is the source.
-      // But we scrambled with `generateScramble`, which might have `R2`.
-      // Analyzer handles `R2`.
-
-      const result = analyzeSolve(scramble, history, startTime);
+      const result = analyzeSolve(solveScramble, history, startTime);
       setAnalysisStats(result);
+      setAnalysisDebug({ scramble: solveScramble, history: activeState.moveHistory });
       setAnalysisOpen(true);
     }
   }, [activeState.facelets, timerState, stopTimer, scramble, activeState.moveHistory]);
