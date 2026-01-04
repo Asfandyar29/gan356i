@@ -5,6 +5,123 @@ import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
 
+// Scramble Arrow Component
+const ScrambleArrow = ({ move }: { move: string }) => {
+  const groupRef = useRef<THREE.Group>(null);
+
+  // Parse move (e.g. "R", "R'", "R2")
+  // Note: flattened moves are usually just passed as "R" or "R'".
+  // If "R2" is passed, we treat it as "R" (first part).
+  // The arrow shows the IMMEDIATE next turn.
+
+  const face = move[0];
+  const modifier = move.length > 1 ? move[1] : '';
+  const isCCW = modifier === "'";
+  const isDouble = modifier === '2'; // Should not happen in flattened, but handle it
+
+  // Standard direction: CW = -1 visual?
+  // Our FACE_ROTATION_SIGNS:
+  // U: -1, D: 1, R: -1, L: 1, F: -1, B: 1
+  // Wait, the arrow should simply point CW or CCW relative to the face.
+  // Visual standard:
+  // CW: Clockwise looking at the face.
+  // CCW: Counter-clockwise looking at the face.
+
+  const color = "#00FF00"; // Green arrow
+  const arcRadius = 1.0;
+  const tubeRadius = 0.08; // Adjusted for cleaner look
+  const headLength = 0.4;
+  const headWidth = 0.3;
+
+  // Position based on face
+  const validFaces = ['U', 'D', 'F', 'B', 'L', 'R'];
+  if (!validFaces.includes(face)) return null;
+
+  // Rotation to align with face
+  // Default Torus lies on XY plane (Z-axis is normal).
+  // Cube faces are approx at +/- 1.5. We place arrow at +/- 2.2 to float above.
+
+  let position: [number, number, number] = [0, 0, 0];
+  let rotation: [number, number, number] = [0, 0, 0];
+
+  const offset = 2.2;
+
+  switch (face) {
+    case 'F': position = [0, 0, offset]; rotation = [0, 0, 0]; break;
+    case 'B': position = [0, 0, -offset]; rotation = [0, Math.PI, 0]; break; // Flip Y to face back
+    case 'U': position = [0, offset, 0]; rotation = [-Math.PI / 2, 0, 0]; break; // Rotate -90 X to face Up
+    case 'D': position = [0, -offset, 0]; rotation = [Math.PI / 2, 0, 0]; break; // Rotate 90 X to face Down
+    case 'R': position = [offset, 0, 0]; rotation = [0, Math.PI / 2, 0]; break; // Rotate 90 Y to face Right
+    case 'L': position = [-offset, 0, 0]; rotation = [0, -Math.PI / 2, 0]; break; // Rotate -90 Y to face Left
+  }
+
+  // Angle length: 90 degrees?
+  const arcAngle = Math.PI / 2; // 90 deg
+
+  // Arrow Head Position
+  // On the arc.
+  // CW: End of arc (positive angle?)
+  // CCW: Start of arc?
+  // Let's rely on `scale` to flip for CCW.
+
+  // Torus geometry is full ring. We use `arc` parameter.
+  // arc = Math.PI/2.
+  // By default, Torus starts at 0 (Right/X-axis) and goes CCW?
+  // We need to verify Three.js Torus orientation.
+  // Usually starts at 3 o'clock (0 rad) and goes CCW.
+
+  return (
+    <group position={position} rotation={rotation as any}>
+      {/* We animate/pulse the arrow */}
+      <group scale={[1, 1, 1]} rotation={[0, 0, isCCW ? Math.PI / 2 : 0]}> {/* Adjust rotation for CW/CCW placement */}
+        {/* Simplified Arrow Construction */}
+        <ArrowArc isCCW={isCCW} isDouble={isDouble} color={color} radius={arcRadius} tube={tubeRadius} />
+      </group>
+    </group>
+  );
+};
+
+const ArrowArc = ({ isCCW, isDouble, color, radius, tube }: any) => {
+  // CW Arrow: Starts at Top (90deg), goes Clockwise to Right (0deg).
+  // CCW Arrow: Starts at Top (90deg), goes Counter-Clockwise to Left (180deg).
+
+  // ThreeJS Torus: Starts 0 (Right), goes CCW.
+
+  // CW: We want arc from 90 down to 0?
+  // Torus arc from 0 to 90 is Q1 (Right to Top).
+  // If we rotate torus -90Z, it goes Top to Right? No, Top(90) to Left(180).
+
+  // Let's just hardcode offsets.
+
+  // CW Configuration
+  // Arc from 12 o'clock to 3 o'clock.
+  const arcLen = isDouble ? Math.PI : Math.PI / 1.5;
+
+  // If CW: Arrow Head at "End" of Clockwise path.
+  // If CCW: Arrow Head at "End" of CCW path.
+
+  return (
+    <group rotation={[0, 0, 0]}>
+      {/* Base Rotation to put center at top */}
+      <group rotation={[0, 0, Math.PI / 2]}>
+        {/* Visual adjustment */}
+        <mesh rotation={[0, 0, isCCW ? 0 : -arcLen]}>
+          <torusGeometry args={[radius, tube, 8, 32, arcLen]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+        </mesh>
+
+        {/* Head */}
+        <group rotation={[0, 0, isCCW ? arcLen : -arcLen]}>
+          <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 2.5 : -2.5]}>
+            <coneGeometry args={[tube * 2.5, tube * 4, 16]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  );
+}
+
 // Check WebGL support
 const isWebGLAvailable = (): boolean => {
   try {
@@ -148,6 +265,7 @@ interface CubeGroupProps {
   orientation: CubeOrientation;
   axisConfig: AxisConfig;
   lastMove: MoveEvent | null;
+  nextMove?: string | null;
 }
 
 // Normalize angle to prevent sudden jumps (keeps angle in -180 to 180 range)
@@ -205,7 +323,7 @@ const getCubeletsForFace = (face: string): { x: number; y: number; z: number }[]
   return cubelets;
 };
 
-const CubeGroup = ({ facelets, orientation, axisConfig, lastMove }: CubeGroupProps) => {
+const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const currentRotation = useRef({ x: 0, y: 0, z: 0 });
   const [animatingLayer, setAnimatingLayer] = useState<AnimatingLayer | null>(null);
@@ -500,6 +618,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove }: CubeGroupPro
           animationRotation={getAnimationRotation(cubelet.position)}
         />
       ))}
+      {nextMove && <ScrambleArrow move={nextMove} />}
     </group>
   );
 };
@@ -508,9 +627,10 @@ interface RubiksCube3DProps {
   facelets: Facelets;
   orientation: CubeOrientation;
   lastMove?: MoveEvent | null;
+  nextMove?: string | null;
 }
 
-const RubiksCube3D = ({ facelets, orientation, lastMove = null }: RubiksCube3DProps) => {
+const RubiksCube3D = ({ facelets, orientation, lastMove = null, nextMove = null }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
 
@@ -554,7 +674,15 @@ const RubiksCube3D = ({ facelets, orientation, lastMove = null }: RubiksCube3DPr
         <directionalLight position={[-10, -10, -5]} intensity={0.3} />
         <pointLight position={[0, 10, 0]} intensity={0.5} />
 
-        <CubeGroup facelets={facelets} orientation={orientation} axisConfig={axisConfig} lastMove={lastMove} />
+
+
+        <CubeGroup
+          facelets={facelets}
+          orientation={orientation}
+          axisConfig={axisConfig}
+          lastMove={lastMove}
+          nextMove={nextMove}
+        />
 
         <OrbitControls
           enablePan={false}

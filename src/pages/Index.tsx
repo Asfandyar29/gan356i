@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Suspense, useRef } from 'react';
+import { useState, useCallback, useEffect, Suspense, useRef, useMemo } from 'react';
 import { useCubeConnection } from '@/hooks/useCubeConnection';
 import { useTimer } from '@/hooks/useTimer';
 import { generateScramble, isCubeSolved, createSolvedCube, CubeState } from '@/types/cube';
@@ -10,6 +10,7 @@ import CubeStats from '@/components/CubeStats';
 import RubiksCube3D from '@/components/RubiksCube3D';
 import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
 import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
+import { toast } from 'sonner';
 
 const CubeTracker = () => {
   const {
@@ -43,6 +44,15 @@ const CubeTracker = () => {
     moveHistory: [],
   });
 
+  // Guided Scrambling State
+  const [scrambleIndex, setScrambleIndex] = useState(0);
+  const [lastMoveCorrect, setLastMoveCorrect] = useState<boolean | null>(null);
+
+  // Inspection State
+  const [inspectionState, setInspectionState] = useState<'idle' | 'running' | 'penalty'>('idle');
+  const [inspectionTime, setInspectionTime] = useState(15000);
+  const inspectionIntervalRef = useRef<number | null>(null);
+
   const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const solveMetaData = useRef({ index: 0, time: 0 });
@@ -69,42 +79,240 @@ const CubeTracker = () => {
     setScramble(newScramble);
     setIsScrambled(false);
     setScrambleFollowed(false);
+    setScrambleIndex(0);
+    setLastMoveCorrect(null);
+    setInspectionState('idle');
+    setInspectionTime(15000);
     resetTimer();
+
+    // Reset inspection timer
+    if (inspectionIntervalRef.current) {
+      clearInterval(inspectionIntervalRef.current);
+      inspectionIntervalRef.current = null;
+    }
   }, [resetTimer]);
 
   // Active state (real connection or demo)
   const activeState = isDemoMode ? demoState : cubeState;
   const isConnected = isDemoMode || connectionState === 'connected';
 
-  // Check if cube is solved and handle timer
+  // --- Guided Scrambling Logic ---
   useEffect(() => {
-    if (!isConnected) return;
+    if (!activeState.lastMove || scramble.length === 0 || scrambleFollowed) return;
 
-    const solved = isCubeSolved(activeState.facelets);
+    const targetMove = scramble[scrambleIndex];
+    // Compare notation (e.g. "R", "R'", "R2")
+    // Note: Our move event provides 'notation' which is "R" or "R'".
+    // Scramble might have "R2". "R2" can be solved by doing "R" then "R".
+    // Or if the user does "R2" (double turn) directly? The cube usually reports two "R" events quickly.
+    // Let's handle simple matching first.
 
-    // If cube is scrambled and we detect a first move, start timer
-    if (scrambleFollowed && timerState === 'idle' && activeState.moveCount > 0 && !solved) {
-      // Record start data
-      if (activeState.lastMove) {
-        solveMetaData.current = {
-          index: Math.max(0, activeState.moveHistory.length - 1),
-          time: activeState.lastMove.timestamp
-        };
+    const performedMove = activeState.lastMove.notation;
+
+    let isMatch = performedMove === targetMove;
+
+    // Handle "2" moves (e.g. target U2, user does U then U)
+    // Complex implementation omitted for robustness, let's stick to 1-move matching.
+    // If target is U2, we expect user to do U twice? Or just match U?
+    // Let's rely on standard matching. If target is U2, user must do U... wait.
+    // If I do U, then U, I get two U events.
+    // Currently generator makes standard moves.
+
+    // Simple logic:
+    // If target is "R2", and user does "R", we stay on "R2" but maybe mark partial?
+    // Let's simplify: Standard 20 move scramble usually has R, R', R2.
+    // If target is R2, we wait for TWO R moves?
+    // Let's just match exact string for now to be safe, BUT R2 logic needs state.
+
+    // Better approach:
+    // Just verify if the move performed is consistent with the target face/direction.
+    // If target is R2, user sends R. That is Correct (partial).
+    // If target is R, user sends R. Correct (complete).
+    // If target is R', user sends R. Incorrect.
+
+    if (targetMove && targetMove.endsWith('2')) {
+      // Allow splitting 2 moves
+      const base = targetMove[0];
+      if (performedMove === base) {
+        // It's a match, but we need another one.
+        // This requires tracking "partial" state.
+        // For now, let's just accept single moves if they match the face/dir.
+        // Actually, let's treat '2' as a special case.
+        // If we receive "R" and target is "R2", we transform target to "R" for next step?
       }
-      startTimer();
     }
 
-    // If cube is solved while timer is running, stop timer
-    if (timerState === 'running' && solved) {
+    // Let's implement EXACT matching for V1 to ensure precision.
+    // User must perform the move exactly? No, smart cube sends single moves.
+    // If I do R2 fast, I get two R events.
+    // So if target is R2:
+    // 1. User does R. Match! Remainder is R.
+    // 2. User does R. Match! Remainder done.
+
+    // So we need to modify scramble array? No, just track index.
+    // If target==R2 and move==R:
+    // We increment index? No, we need to track "sub-index".
+    // Hack: Modify current scramble item in place? No.
+
+    // Let's assume standard moves R/R'/L/L' etc match perfectly.
+    // For '2' moves:
+    // If target is X2.
+    // If user does X, we treat it as valid, but DON'T advance index yet?
+    // We need to mutate the scramble display visually?
+
+    // SIMPLIFICATION:
+    // If target is X2, and user does X.
+    // We update visual to show 'X' remaining?
+    // Let's just advance if it matches face.
+    // (This is a loose scramble check, but acceptable for V1).
+
+    // STICK TO STRICT WRITER LOGIC:
+    // Comparing `performedMove` to `targetMove`.
+    // If target is `R2`, and user does `R`.
+    // We treat this as "Correct - Partial".
+    // We need to update state to say "1 turn left on current move".
+    // For now, let's just use exact string match which means user might get frustrated with R2.
+    // REVISION: The `generateScramble` produces R, R', R2.
+    // Cube ONLY produces R, R'.
+    // So if target is R2, valid inputs are R+R.
+    // We handle this by splitting the scramble internally?
+
+    // Let's unpack the scramble into single moves for tracking!
+    // Great idea.
+  }, [activeState.lastMove]);
+
+  // Unpack scramble on generation for tracking
+  const [flatScramble, setFlatScramble] = useState<string[]>([]);
+  useEffect(() => {
+    const flat: string[] = [];
+    scramble.forEach(m => {
+      if (m.endsWith('2')) {
+        flat.push(m[0]);
+        flat.push(m[0]);
+      } else {
+        flat.push(m);
+      }
+    });
+    setFlatScramble(flat);
+  }, [scramble]);
+
+  // Guided Scramble Check
+  useEffect(() => {
+    if (!activeState.lastMove || flatScramble.length === 0 || scrambleFollowed) return;
+    if (activeState.moveCount === 0) return; // Ignore initial state
+
+    const target = flatScramble[scrambleIndex];
+    const move = activeState.lastMove.notation;
+
+    // Check for match
+    // Note: Cube 'R' matches Scramble 'R'.
+    // Cube "R'" matches Scramble "R'".
+
+    if (move === target) {
+      setLastMoveCorrect(true);
+      const nextIndex = scrambleIndex + 1;
+      setScrambleIndex(nextIndex);
+
+      if (nextIndex >= flatScramble.length) {
+        // Scramble Complete!
+        setScrambleFollowed(true);
+        toast.success("Scramble Complete! Inspection starting...");
+
+        // Start Inspection Timer
+        setInspectionState('running');
+        setInspectionTime(15000);
+
+        inspectionIntervalRef.current = window.setInterval(() => {
+          setInspectionTime(t => {
+            if (t <= 0) {
+              setInspectionState('penalty');
+              if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
+              return 0;
+            }
+            return t - 100;
+          });
+        }, 100);
+      }
+    } else {
+      setLastMoveCorrect(false);
+    }
+  }, [activeState.moveCount]); // Trigger on move count change to avoid duplicate checks
+
+  // Calculate display index for ScrambleDisplay (mapping flat index back to original R2 etc)
+  const displayScrambleIndex = useMemo(() => {
+    let flatCount = 0;
+    for (let i = 0; i < scramble.length; i++) {
+      const move = scramble[i];
+      const len = move.endsWith('2') ? 2 : 1;
+      if (scrambleIndex < flatCount + len) {
+        return i;
+      }
+      flatCount += len;
+    }
+    return scramble.length;
+  }, [scramble, scrambleIndex]);
+
+  // Ref to track move count when inspection starts
+  const movesAtInspectionStart = useRef(0);
+
+  // Capture move count when inspection starts (scramble complete)
+  useEffect(() => {
+    if (inspectionState === 'running' && movesAtInspectionStart.current === 0) {
+      movesAtInspectionStart.current = activeState.moveCount;
+    }
+    if (inspectionState === 'idle') {
+      movesAtInspectionStart.current = 0;
+    }
+  }, [inspectionState, activeState.moveCount]);
+
+  // Real Timer Start Logic
+  useEffect(() => {
+    if (timerState !== 'idle' || !scrambleFollowed) return;
+
+    // If we are in inspection mode
+    if (inspectionState === 'running' || inspectionState === 'penalty') {
+      // If moves have increased since inspection started
+      if (activeState.moveCount > movesAtInspectionStart.current && movesAtInspectionStart.current > 0) {
+        // Stop inspection
+        if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
+        setInspectionState('idle');
+
+        // Record Start Metadata
+        if (activeState.lastMove) {
+          solveMetaData.current = {
+            index: Math.max(0, activeState.moveHistory.length - 1),
+            time: activeState.lastMove.timestamp
+          };
+
+          // START TIMER
+          startTimer();
+        }
+      }
+    }
+  }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer, solveMetaData]);
+
+  // Solution Analysis (Stop Timer)
+  useEffect(() => {
+    if (timerState === 'running' && isCubeSolved(activeState.facelets)) {
       stopTimer();
       // Analyze solve
+      // We need to be careful. The solve history starts from `solveMetaData.current.index`.
+      // The `startTime` is `solveMetaData.current.time`.
+
       const history = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
+
+      // We pass the ORIGINAL scramble (before flattening) or flattened?
+      // `analyzeSolve` expects string array. `scramble` is the source.
+      // But we scrambled with `generateScramble`, which might have `R2`.
+      // Analyzer handles `R2`.
+
       const result = analyzeSolve(scramble, history, startTime);
       setAnalysisStats(result);
       setAnalysisOpen(true);
     }
-  }, [activeState, isConnected, scrambleFollowed, timerState, startTimer, stopTimer, scramble]);
+  }, [activeState.facelets, timerState, stopTimer, scramble, activeState.moveHistory]);
+
 
   // Mark scramble as followed when user applies scramble manually
   const handleMarkScrambleFollowed = useCallback(() => {
@@ -199,19 +407,33 @@ const CubeTracker = () => {
           />
         </div>
 
-        {/* Scramble Display */}
+        {/* Guided Scramble / Inspection Display */}
         {scramble.length > 0 && (
           <div className="animate-scale-in space-y-4">
-            <ScrambleDisplay scramble={scramble} />
-            {!scrambleFollowed && (
-              <div className="text-center">
-                <button
-                  onClick={handleMarkScrambleFollowed}
-                  className="px-6 py-2 rounded-lg bg-success/20 text-success border border-success/30 hover:bg-success/30 transition-colors font-medium"
-                >
-                  I've followed the scramble - Ready to solve!
-                </button>
+            {/* Show Inspection Timer if Active */}
+            {inspectionState === 'running' && (
+              <div className="text-center animate-pulse">
+                <div className={`text-6xl font-bold font-mono ${inspectionTime < 3000 ? 'text-destructive' : inspectionTime < 8000 ? 'text-warning' : 'text-primary'}`}>
+                  {(inspectionTime / 1000).toFixed(1)}
+                </div>
+                <div className="text-sm text-muted-foreground uppercase tracking-wider">Inspection</div>
               </div>
+            )}
+
+            {inspectionState === 'penalty' && (
+              <div className="text-center">
+                <div className="text-4xl font-bold text-destructive">PENALTY</div>
+                <div className="text-sm">Start solve immediately!</div>
+              </div>
+            )}
+
+            {/* Scramble Display (Hidden during solve usually? No keep it) */}
+            {timerState === 'idle' && (
+              <ScrambleDisplay
+                scramble={scramble}
+                currentIndex={displayScrambleIndex}
+                lastMoveCorrect={lastMoveCorrect}
+              />
             )}
           </div>
         )}
@@ -228,6 +450,7 @@ const CubeTracker = () => {
                 facelets={activeState.facelets}
                 orientation={activeState.orientation}
                 lastMove={activeState.lastMove}
+                nextMove={flatScramble[scrambleIndex]}
               />
             </Suspense>
           </div>

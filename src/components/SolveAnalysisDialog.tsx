@@ -6,15 +6,17 @@ import {
 } from "@/components/ui/dialog";
 import { CFOPStats } from "@/lib/cfop-analyzer";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { formatTime } from "@/types/cube";
+import { formatTime, MoveEvent } from "@/types/cube";
 
 interface SolveAnalysisDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     stats: CFOPStats | null;
+    scramble?: string[]; // Add scramble prop for debug
+    debugHistory?: MoveEvent[]; // Add history for debug
 }
 
-const SolveAnalysisDialog = ({ open, onOpenChange, stats }: SolveAnalysisDialogProps) => {
+const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory }: SolveAnalysisDialogProps) => {
     if (!stats) return null;
 
     const data = [
@@ -114,6 +116,14 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats }: SolveAnalysisDialogP
                         )}
                     </div>
 
+                </div>
+                <div className="space-y-2 mt-4 p-4 bg-muted/20 rounded-lg text-xs font-mono text-muted-foreground overflow-hidden">
+                    <div className="font-bold">Debug Info</div>
+                    <div>Base Face: {stats.baseFace || 'None Detected'}</div>
+                    <div>CFOP Detected: {stats.isCfop ? 'Yes' : 'No'}</div>
+                    <div>Scramble: {scramble?.join(' ')}</div>
+                    <div>History Length: {debugHistory?.length || 0}</div>
+                    <div>Steps: Cross={stats.cross.moveCount}, F2L={stats.f2l.moveCount}, OLL={stats.oll.moveCount}, PLL={stats.pll.moveCount}</div>
                 </div>
             </DialogContent>
         </Dialog>
