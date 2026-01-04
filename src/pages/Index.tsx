@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense, useRef } from 'react';
 import { useCubeConnection } from '@/hooks/useCubeConnection';
 import { useTimer } from '@/hooks/useTimer';
 import { generateScramble, isCubeSolved, createSolvedCube, CubeState } from '@/types/cube';
@@ -8,6 +8,8 @@ import TimerDisplay from '@/components/TimerDisplay';
 import ScrambleDisplay from '@/components/ScrambleDisplay';
 import CubeStats from '@/components/CubeStats';
 import RubiksCube3D from '@/components/RubiksCube3D';
+import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
+import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
 
 const CubeTracker = () => {
   const {
@@ -38,12 +40,15 @@ const CubeTracker = () => {
     batteryLevel: 87,
     moveCount: 0,
     lastMove: null,
+    moveHistory: [],
   });
 
-  // Demo mode rotation animation
+  const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const solveMetaData = useRef({ index: 0, time: 0 });
   useEffect(() => {
     if (!isDemoMode) return;
-    
+
     const interval = setInterval(() => {
       setDemoState(prev => ({
         ...prev,
@@ -79,14 +84,27 @@ const CubeTracker = () => {
 
     // If cube is scrambled and we detect a first move, start timer
     if (scrambleFollowed && timerState === 'idle' && activeState.moveCount > 0 && !solved) {
+      // Record start data
+      if (activeState.lastMove) {
+        solveMetaData.current = {
+          index: Math.max(0, activeState.moveHistory.length - 1),
+          time: activeState.lastMove.timestamp
+        };
+      }
       startTimer();
     }
 
     // If cube is solved while timer is running, stop timer
     if (timerState === 'running' && solved) {
       stopTimer();
+      // Analyze solve
+      const history = activeState.moveHistory.slice(solveMetaData.current.index);
+      const startTime = solveMetaData.current.time;
+      const result = analyzeSolve(scramble, history, startTime);
+      setAnalysisStats(result);
+      setAnalysisOpen(true);
     }
-  }, [activeState, isConnected, scrambleFollowed, timerState, startTimer, stopTimer]);
+  }, [activeState, isConnected, scrambleFollowed, timerState, startTimer, stopTimer, scramble]);
 
   // Mark scramble as followed when user applies scramble manually
   const handleMarkScrambleFollowed = useCallback(() => {
@@ -166,6 +184,7 @@ const CubeTracker = () => {
                   batteryLevel: 87,
                   moveCount: 0,
                   lastMove: null,
+                  moveHistory: [],
                 });
               } else {
                 resetCube();
@@ -205,8 +224,8 @@ const CubeTracker = () => {
                 <div className="text-muted-foreground">Loading 3D view...</div>
               </div>
             }>
-              <RubiksCube3D 
-                facelets={activeState.facelets} 
+              <RubiksCube3D
+                facelets={activeState.facelets}
                 orientation={activeState.orientation}
                 lastMove={activeState.lastMove}
               />
@@ -220,16 +239,26 @@ const CubeTracker = () => {
         </div>
 
         {/* Status indicator */}
-        {timerState === 'stopped' && (
+        {timerState === 'stopped' && !analysisOpen && (
           <div className="text-center animate-scale-in">
-            <div className="inline-block px-6 py-3 rounded-xl bg-success/10 border border-success/30">
-              <span className="text-success font-bold text-xl">
+            <div
+              className="inline-block px-6 py-3 rounded-xl bg-success/10 border border-success/30 cursor-pointer hover:bg-success/20 transition-colors"
+              onClick={() => setAnalysisOpen(true)}
+            >
+              <div className="text-success font-bold text-xl">
                 🎉 Solved in {formattedTime}!
-              </span>
+              </div>
+              <div className="text-sm text-success/70">Click for Stats</div>
             </div>
           </div>
         )}
       </div>
+
+      <SolveAnalysisDialog
+        open={analysisOpen}
+        onOpenChange={setAnalysisOpen}
+        stats={analysisStats}
+      />
     </div>
   );
 };

@@ -15,6 +15,7 @@ export interface AxisConfig {
   offsetX: number;
   offsetY: number;
   offsetZ: number;
+  offsetQuaternion: { x: number; y: number; z: number; w: number } | null;
 }
 
 // Default config based on user's working settings:
@@ -32,6 +33,7 @@ const defaultConfig: AxisConfig = {
   offsetX: 0,
   offsetY: 0,
   offsetZ: 0,
+  offsetQuaternion: null,
 };
 
 const STORAGE_KEY = 'cube-axis-config';
@@ -75,11 +77,24 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
 
   const setCurrentAsNeutral = () => {
     if (currentOrientation) {
-      updateConfig({
+      const updates: Partial<AxisConfig> = {
         offsetX: -currentOrientation[config.xSource],
         offsetY: -currentOrientation[config.ySource],
         offsetZ: -currentOrientation[config.zSource],
-      });
+      };
+
+      if (currentOrientation.quaternion) {
+        const { x, y, z, w } = currentOrientation.quaternion;
+        // To create a tare/offset quaternion:
+        // We want Target = Offset * Current
+        // So Offset = Target * Inverse(Current)
+        // Target is identity (neutral).
+        // So Offset = Inverse(Current).
+        // Inverse of unit quaternion (x,y,z,w) is (-x,-y,-z,w).
+        updates.offsetQuaternion = { x: -x, y: -y, z: -z, w: w };
+      }
+
+      updateConfig(updates);
     }
   };
 
@@ -88,7 +103,7 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
     const sourceKey2 = `${axis2}Source` as keyof AxisConfig;
     const source1 = config[sourceKey1] as 'x' | 'y' | 'z';
     const source2 = config[sourceKey2] as 'x' | 'y' | 'z';
-    
+
     updateConfig({
       [sourceKey1]: source2,
       [sourceKey2]: source1,
@@ -172,23 +187,34 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
           {/* Current Values Display */}
           {currentOrientation && (
             <div className="mb-4 p-2 bg-muted/30 rounded-lg">
-              <div className="text-xs text-muted-foreground mb-1">Current Gyro Values:</div>
-              <div className="flex gap-2 text-xs font-mono">
+              <div className="text-xs text-muted-foreground mb-1">Current Gyro Values (Euler):</div>
+              <div className="flex gap-2 text-xs font-mono mb-2">
                 <span className="text-red-400">X: {currentOrientation.x.toFixed(0)}°</span>
                 <span className="text-green-400">Y: {currentOrientation.y.toFixed(0)}°</span>
                 <span className="text-blue-400">Z: {currentOrientation.z.toFixed(0)}°</span>
               </div>
+              {currentOrientation.quaternion && (
+                <>
+                  <div className="text-xs text-muted-foreground mb-1">Quaternion:</div>
+                  <div className="grid grid-cols-2 gap-1 text-xs font-mono">
+                    <span className="text-foreground">X: {currentOrientation.quaternion.x.toFixed(3)}</span>
+                    <span className="text-foreground">Y: {currentOrientation.quaternion.y.toFixed(3)}</span>
+                    <span className="text-foreground">Z: {currentOrientation.quaternion.z.toFixed(3)}</span>
+                    <span className="text-foreground">W: {currentOrientation.quaternion.w.toFixed(3)}</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
           {/* Axis Mappings */}
           <div className="space-y-3 mb-4">
             <div className="text-xs text-muted-foreground mb-2">Axis Mapping</div>
-            
+
             {axisLabels.map(({ key, label, color, description }) => {
               const sourceKey = `${key}Source` as keyof AxisConfig;
               const invertKey = `${key}Invert` as keyof AxisConfig;
-              
+
               return (
                 <div key={key} className="p-2 bg-muted/30 rounded-lg">
                   <div className="flex items-center justify-between mb-1">

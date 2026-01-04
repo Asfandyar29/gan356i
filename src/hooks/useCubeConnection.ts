@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { 
-  CubeState, 
-  ConnectionState, 
-  CubeOrientation, 
-  MoveEvent, 
+import {
+  CubeState,
+  ConnectionState,
+  CubeOrientation,
+  MoveEvent,
   createSolvedCube,
   CubeFace,
   Facelets,
@@ -42,7 +42,7 @@ const kociembaToFacelets = (kociemba: string): Facelets => {
     'L': 'orange',
     'B': 'blue',
   };
-  
+
   return kociemba.split('').map(c => colorMap[c] || 'white') as Facelets;
 };
 
@@ -94,6 +94,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     batteryLevel: 100,
     moveCount: 0,
     lastMove: null,
+    moveHistory: [],
   });
 
   const connectionRef = useRef<GanCubeConnection | null>(null);
@@ -121,6 +122,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const handleCubeEvent = useCallback((event: GanCubeEvent) => {
     switch (event.type) {
       case 'FACELETS':
+        console.log('[GAN] Received facelets:', event.facelets.length, event.facelets);
         setCubeState(prev => ({
           ...prev,
           facelets: kociembaToFacelets(event.facelets),
@@ -132,20 +134,18 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
         // GAN sends: 0=U, 1=R, 2=F, 3=D, 4=L, 5=B (standard Kociemba order)
         const faceMapping = 'URFDLB';
         const face = faceMapping.charAt(event.face) as CubeFace;
-        
+
         // Direction: 0 = CW (clockwise), 1 = CCW (counter-clockwise)
-        // For L, R, F, B faces we need to invert the direction to match visual rotation
+        // For visual rotation, we handle the axis direction in the 3D component.
+        // Here we strictly follow standard notation: 0=CW(1), 1=CCW(-1)
         let direction: 1 | -1 = event.direction === 0 ? 1 : -1;
-        if (face === 'L' || face === 'R' || face === 'F' || face === 'B') {
-          direction = direction === 1 ? -1 : 1;
-        }
-        
+
         // Build the correct notation with the inverted direction
         let notation = face;
         if (direction === -1) {
           notation += "'";
         }
-        
+
         const moveEvent: MoveEvent = {
           face,
           direction,
@@ -156,6 +156,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
           ...prev,
           moveCount: moveCountRef.current,
           lastMove: moveEvent,
+          moveHistory: [...prev.moveHistory, moveEvent],
         }));
         break;
 
@@ -163,7 +164,10 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
         const orientation = quaternionToEuler(event.quaternion);
         setCubeState(prev => ({
           ...prev,
-          orientation,
+          orientation: {
+            ...orientation,
+            quaternion: event.quaternion,
+          },
         }));
         break;
 
@@ -183,7 +187,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
   // Custom MAC address provider
   const customMacAddressProvider = useCallback(async (
-    device: BluetoothDevice, 
+    device: BluetoothDevice,
     isFallbackCall?: boolean
   ): Promise<string | null> => {
     // If we have a saved MAC address, try it first
@@ -196,7 +200,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
     if (isFallbackCall) {
       setPendingDeviceName(device.name || 'GAN Cube');
       setNeedsMacAddress(true);
-      
+
       // Return a promise that will be resolved when user provides MAC
       return new Promise<string | null>((resolve) => {
         macResolverRef.current = resolve;
@@ -245,15 +249,15 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
     try {
       const conn = await connectGanCube(customMacAddressProvider);
-      
+
       connectionRef.current = conn;
       setDeviceName(conn.deviceName);
-      
+
       // Save the MAC address from the connection
       if (conn.deviceMAC) {
         setMacAddress(conn.deviceMAC);
       }
-      
+
       // Subscribe to events
       subscriptionRef.current = conn.events$.subscribe({
         next: handleCubeEvent,
@@ -265,7 +269,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       });
 
       setConnectionState('connected');
-      
+
       // Request initial state
       await conn.sendCubeCommand({ type: 'REQUEST_FACELETS' });
       await conn.sendCubeCommand({ type: 'REQUEST_BATTERY' });
@@ -304,8 +308,9 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       batteryLevel: cubeState.batteryLevel,
       moveCount: 0,
       lastMove: null,
+      moveHistory: [],
     });
-    
+
     // Also reset the cube's internal state
     if (connectionRef.current) {
       connectionRef.current.sendCubeCommand({ type: 'REQUEST_RESET' });

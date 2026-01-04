@@ -5,9 +5,9 @@ export type CubeColor = 'white' | 'yellow' | 'green' | 'blue' | 'red' | 'orange'
 export type CubeFace = 'U' | 'D' | 'F' | 'B' | 'L' | 'R';
 
 // Cube move notation
-export type CubeMove = 'U' | 'U\'' | 'U2' | 'D' | 'D\'' | 'D2' | 
-                       'F' | 'F\'' | 'F2' | 'B' | 'B\'' | 'B2' |
-                       'L' | 'L\'' | 'L2' | 'R' | 'R\'' | 'R2';
+export type CubeMove = 'U' | 'U\'' | 'U2' | 'D' | 'D\'' | 'D2' |
+  'F' | 'F\'' | 'F2' | 'B' | 'B\'' | 'B2' |
+  'L' | 'L\'' | 'L2' | 'R' | 'R\'' | 'R2';
 
 // Facelets state - 54 stickers (9 per face, 6 faces)
 // Order: U (0-8), R (9-17), F (18-26), D (27-35), L (36-44), B (45-53)
@@ -15,9 +15,15 @@ export type Facelets = CubeColor[];
 
 // Gyroscope/orientation data
 export interface CubeOrientation {
-  x: number;  // Roll
-  y: number;  // Pitch  
-  z: number;  // Yaw
+  x: number;  // Roll (Euler)
+  y: number;  // Pitch (Euler)
+  z: number;  // Yaw (Euler)
+  quaternion?: {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+  };
 }
 
 // Timer state
@@ -41,6 +47,7 @@ export interface CubeState {
   batteryLevel: number;
   moveCount: number;
   lastMove: MoveEvent | null;
+  moveHistory: MoveEvent[];
 }
 
 // Create solved cube state
@@ -76,13 +83,13 @@ export const generateScramble = (): string[] => {
     do {
       face = faces[Math.floor(Math.random() * faces.length)];
     } while (
-      face === lastFace || 
+      face === lastFace ||
       (face === secondLastFace && isOppositeFace(face, lastFace!))
     );
 
     const modifier = modifiers[Math.floor(Math.random() * modifiers.length)];
     scramble.push(face + modifier);
-    
+
     secondLastFace = lastFace;
     lastFace = face;
   }
@@ -104,7 +111,7 @@ export const formatTime = (ms: number): string => {
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.floor((ms % 60000) / 1000);
   const milliseconds = Math.floor((ms % 1000) / 10);
-  
+
   if (minutes > 0) {
     return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   }
