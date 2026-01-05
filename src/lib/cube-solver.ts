@@ -44,17 +44,26 @@ export const applyMove = (facelets: Facelets, move: MoveEvent['face'], direction
 const match = (facelets: Facelets, idx: number, centerIdx: number) => facelets[idx] === facelets[centerIdx];
 
 // --- D Face CFOP (Yellow Cross) ---
-// --- D Face CFOP (Yellow Cross) ---
 export const checkCrossD = (f: Facelets): boolean => {
     // Check side matches first (must match side centers)
-    if (!match(f, 25, CENTER_F)) return false; // F side
-    if (!match(f, 16, CENTER_R)) return false; // R side
-    if (!match(f, 52, CENTER_B)) return false; // B side
-    if (!match(f, 43, CENTER_L)) return false; // L side
+    const f25 = f[25], fCenter = f[CENTER_F];
+    const r16 = f[16], rCenter = f[CENTER_R];
+    const b52 = f[52], bCenter = f[CENTER_B];
+    const l43 = f[43], lCenter = f[CENTER_L];
+    const d28 = f[28], d30 = f[30], d32 = f[32], d34 = f[34];
+
+    // Log once every 50 calls to avoid spam (use a simple check)
+    if (Math.random() < 0.02) {
+        console.log(`[CrossD Check] F:${f25}==${fCenter}? R:${r16}==${rCenter}? B:${b52}==${bCenter}? L:${l43}==${lCenter}? D uniform:${d28},${d30},${d32},${d34}`);
+    }
+
+    if (f25 !== fCenter) return false;
+    if (r16 !== rCenter) return false;
+    if (b52 !== bCenter) return false;
+    if (l43 !== lCenter) return false;
 
     // Check if D edges are uniform color
-    const c = f[28]; // Reference color
-    if (f[32] !== c || f[34] !== c || f[30] !== c) return false;
+    if (d32 !== d28 || d34 !== d28 || d30 !== d28) return false;
 
     return true;
 };
@@ -116,24 +125,32 @@ export const checkF2LU = (f: Facelets): boolean => {
     if (!checkCrossU(f)) return false;
     const uColor = f[1]; // Derived U color
 
+    // Log once randomly to debug
+    const shouldLog = Math.random() < 0.1;
+
     // Pairs (Corners are 0,2,6,8 on U face)
-    // BL
-    if (f[0] !== uColor || !match(f, 47, CENTER_B) || !match(f, 36, CENTER_L)) return false;
-    if (!match(f, 50, CENTER_B) || !match(f, 39, CENTER_L)) return false;
+    // UBL corner: U[0], B[2]=47, L[0]=36. BL edge: B[5]=50, L[3]=39
+    const ubl = f[0] === uColor && f[47] === f[CENTER_B] && f[36] === f[CENTER_L];
+    const blEdge = f[50] === f[CENTER_B] && f[39] === f[CENTER_L];
 
-    // BR
-    if (f[2] !== uColor || !match(f, 45, CENTER_B) || !match(f, 11, CENTER_R)) return false;
-    if (!match(f, 48, CENTER_B) || !match(f, 14, CENTER_R)) return false;
+    // UBR corner: U[2], B[0]=45, R[2]=11. BR edge: B[3]=48, R[5]=14
+    const ubr = f[2] === uColor && f[45] === f[CENTER_B] && f[11] === f[CENTER_R];
+    const brEdge = f[48] === f[CENTER_B] && f[14] === f[CENTER_R];
 
-    // FL
-    if (f[6] !== uColor || !match(f, 18, CENTER_F) || !match(f, 38, CENTER_L)) return false;
-    if (!match(f, 21, CENTER_F) || !match(f, 41, CENTER_L)) return false;
+    // UFL corner: U[6], F[0]=18, L[2]=38. FL edge: F[3]=21, L[5]=41
+    const ufl = f[6] === uColor && f[18] === f[CENTER_F] && f[38] === f[CENTER_L];
+    const flEdge = f[21] === f[CENTER_F] && f[41] === f[CENTER_L];
 
-    // FR
-    if (f[8] !== uColor || !match(f, 20, CENTER_F) || !match(f, 9, CENTER_R)) return false;
-    if (!match(f, 23, CENTER_F) || !match(f, 12, CENTER_R)) return false;
+    // UFR corner: U[8], F[2]=20, R[0]=9. FR edge: F[5]=23, R[3]=12
+    const ufr = f[8] === uColor && f[20] === f[CENTER_F] && f[9] === f[CENTER_R];
+    const frEdge = f[23] === f[CENTER_F] && f[12] === f[CENTER_R];
 
-    return true;
+    if (shouldLog) {
+        console.log(`[F2LU Check] UBL:${ubl}/${blEdge} UBR:${ubr}/${brEdge} UFL:${ufl}/${flEdge} UFR:${ufr}/${frEdge}`);
+        console.log(`[F2LU Values] uColor=${uColor} | UBL: U[0]=${f[0]} B[47]=${f[47]}/${f[CENTER_B]} L[36]=${f[36]}/${f[CENTER_L]}`);
+    }
+
+    return ubl && blEdge && ubr && brEdge && ufl && flEdge && ufr && frEdge;
 };
 
 export const checkOLLU = (f: Facelets): boolean => {

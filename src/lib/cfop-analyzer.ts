@@ -42,6 +42,13 @@ const parseMoveString = (moveStr: string): { face: CubeFace; direction: 1 | -1 }
 export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], startTime: number): CFOPStats | null => {
     let facelets = createSolvedCube();
 
+    console.log('[CFOP] Starting analysis', {
+        scrambleLength: scramble.length,
+        historyLength: moveHistory.length,
+        scramble: scramble.join(' '),
+        firstFewMoves: moveHistory.slice(0, 3).map(m => m.notation)
+    });
+
     // Apply scramble
     scramble.forEach(moveStr => {
         const moves = parseMoveString(moveStr);
@@ -49,6 +56,8 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
             facelets = applyMove(facelets, m.face, m.direction);
         });
     });
+
+    console.log('[CFOP] After scramble, D edges:', facelets[28], facelets[30], facelets[32], facelets[34]);
 
     let baseFace: 'U' | 'D' | null = null;
     let crossDone: number | null = null;
@@ -60,6 +69,12 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
 
     for (let i = 0; i < moveHistory.length; i++) {
         const move = moveHistory[i];
+
+        // Log first 3 moves for debugging
+        if (i < 3) {
+            console.log(`[CFOP] Applying move ${i}: ${move.notation} (face=${move.face}, dir=${move.direction})`);
+        }
+
         facelets = applyMove(facelets, move.face, move.direction);
 
         // Check states
@@ -68,10 +83,12 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 baseFace = 'D';
                 crossDone = move.timestamp;
                 moveCounts.cross = i + 1;
+                console.log(`[CFOP] Cross (D) detected at move ${i + 1}`);
             } else if (checkCrossU(facelets)) {
                 baseFace = 'U';
                 crossDone = move.timestamp;
                 moveCounts.cross = i + 1;
+                console.log(`[CFOP] Cross (U) detected at move ${i + 1}`);
             }
         } else {
             // F2L
@@ -80,6 +97,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (isF2L) {
                     f2lDone = move.timestamp;
                     moveCounts.f2l = i + 1 - moveCounts.cross;
+                    console.log(`[CFOP] F2L detected at move ${i + 1}`);
                 }
             }
 
@@ -89,6 +107,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (isOLL) {
                     ollDone = move.timestamp;
                     moveCounts.oll = i + 1 - (moveCounts.cross + moveCounts.f2l);
+                    console.log(`[CFOP] OLL detected at move ${i + 1}`);
                 }
             }
 
@@ -97,6 +116,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (checkPLL(facelets)) {
                     pllDone = move.timestamp;
                     moveCounts.pll = i + 1 - (moveCounts.cross + moveCounts.f2l + moveCounts.oll);
+                    console.log(`[CFOP] PLL detected at move ${i + 1}`);
                 }
             }
         }
@@ -127,6 +147,14 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
 
     // Better handling:
     const finalTime = pllDone || moveHistory[moveHistory.length - 1]?.timestamp || Date.now();
+
+    // Debug: log final cube state if F2L failed
+    if (!f2lDone && crossDone) {
+        console.log('[CFOP] F2L never detected! Final facelets U:',
+            facelets.slice(0, 9).join(','),
+            'F:', facelets.slice(18, 27).join(','),
+            'R:', facelets.slice(9, 18).join(','));
+    }
 
     return {
         cross: { timestamp: crossDone || 0, duration: crossTime, moveCount: moveCounts.cross },
