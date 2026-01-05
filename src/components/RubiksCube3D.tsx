@@ -1,80 +1,43 @@
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
+import { applyMove } from '@/lib/cube-solver';
 
 // Scramble Arrow Component
 const ScrambleArrow = ({ move }: { move: string }) => {
   const groupRef = useRef<THREE.Group>(null);
 
-  // Parse move (e.g. "R", "R'", "R2")
-  // Note: flattened moves are usually just passed as "R" or "R'".
-  // If "R2" is passed, we treat it as "R" (first part).
-  // The arrow shows the IMMEDIATE next turn.
-
   const face = move[0];
   const modifier = move.length > 1 ? move[1] : '';
   const isCCW = modifier === "'";
-  const isDouble = modifier === '2'; // Should not happen in flattened, but handle it
-
-  // Standard direction: CW = -1 visual?
-  // Our FACE_ROTATION_SIGNS:
-  // U: -1, D: 1, R: -1, L: 1, F: -1, B: 1
-  // Wait, the arrow should simply point CW or CCW relative to the face.
-  // Visual standard:
-  // CW: Clockwise looking at the face.
-  // CCW: Counter-clockwise looking at the face.
+  const isDouble = modifier === '2';
 
   const color = "#00FF00"; // Green arrow
   const arcRadius = 1.0;
-  const tubeRadius = 0.08; // Adjusted for cleaner look
-  const headLength = 0.4;
-  const headWidth = 0.3;
+  const tubeRadius = 0.08;
 
-  // Position based on face
   const validFaces = ['U', 'D', 'F', 'B', 'L', 'R'];
   if (!validFaces.includes(face)) return null;
 
-  // Rotation to align with face
-  // Default Torus lies on XY plane (Z-axis is normal).
-  // Cube faces are approx at +/- 1.5. We place arrow at +/- 2.2 to float above.
-
   let position: [number, number, number] = [0, 0, 0];
   let rotation: [number, number, number] = [0, 0, 0];
-
   const offset = 2.2;
 
   switch (face) {
     case 'F': position = [0, 0, offset]; rotation = [0, 0, 0]; break;
-    case 'B': position = [0, 0, -offset]; rotation = [0, Math.PI, 0]; break; // Flip Y to face back
-    case 'U': position = [0, offset, 0]; rotation = [-Math.PI / 2, 0, 0]; break; // Rotate -90 X to face Up
-    case 'D': position = [0, -offset, 0]; rotation = [Math.PI / 2, 0, 0]; break; // Rotate 90 X to face Down
-    case 'R': position = [offset, 0, 0]; rotation = [0, Math.PI / 2, 0]; break; // Rotate 90 Y to face Right
-    case 'L': position = [-offset, 0, 0]; rotation = [0, -Math.PI / 2, 0]; break; // Rotate -90 Y to face Left
+    case 'B': position = [0, 0, -offset]; rotation = [0, Math.PI, 0]; break;
+    case 'U': position = [0, offset, 0]; rotation = [-Math.PI / 2, 0, 0]; break;
+    case 'D': position = [0, -offset, 0]; rotation = [Math.PI / 2, 0, 0]; break;
+    case 'R': position = [offset, 0, 0]; rotation = [0, Math.PI / 2, 0]; break;
+    case 'L': position = [-offset, 0, 0]; rotation = [0, -Math.PI / 2, 0]; break;
   }
-
-  // Angle length: 90 degrees?
-  const arcAngle = Math.PI / 2; // 90 deg
-
-  // Arrow Head Position
-  // On the arc.
-  // CW: End of arc (positive angle?)
-  // CCW: Start of arc?
-  // Let's rely on `scale` to flip for CCW.
-
-  // Torus geometry is full ring. We use `arc` parameter.
-  // arc = Math.PI/2.
-  // By default, Torus starts at 0 (Right/X-axis) and goes CCW?
-  // We need to verify Three.js Torus orientation.
-  // Usually starts at 3 o'clock (0 rad) and goes CCW.
 
   return (
     <group position={position} rotation={rotation as any}>
-      {/* We animate/pulse the arrow */}
-      <group scale={[1, 1, 1]} rotation={[0, 0, isCCW ? Math.PI / 2 : 0]}> {/* Adjust rotation for CW/CCW placement */}
-        {/* Simplified Arrow Construction */}
+      <group scale={[1, 1, 1]} rotation={[0, 0, isCCW ? Math.PI / 2 : 0]}>
         <ArrowArc isCCW={isCCW} isDouble={isDouble} color={color} radius={arcRadius} tube={tubeRadius} />
       </group>
     </group>
@@ -82,35 +45,16 @@ const ScrambleArrow = ({ move }: { move: string }) => {
 };
 
 const ArrowArc = ({ isCCW, isDouble, color, radius, tube }: any) => {
-  // CW Arrow: Starts at Top (90deg), goes Clockwise to Right (0deg).
-  // CCW Arrow: Starts at Top (90deg), goes Counter-Clockwise to Left (180deg).
-
-  // ThreeJS Torus: Starts 0 (Right), goes CCW.
-
-  // CW: We want arc from 90 down to 0?
-  // Torus arc from 0 to 90 is Q1 (Right to Top).
-  // If we rotate torus -90Z, it goes Top to Right? No, Top(90) to Left(180).
-
-  // Let's just hardcode offsets.
-
-  // CW Configuration
-  // Arc from 12 o'clock to 3 o'clock.
   const arcLen = isDouble ? Math.PI : Math.PI / 1.5;
-
-  // If CW: Arrow Head at "End" of Clockwise path.
-  // If CCW: Arrow Head at "End" of CCW path.
 
   return (
     <group rotation={[0, 0, 0]}>
-      {/* Base Rotation to put center at top */}
       <group rotation={[0, 0, Math.PI / 2]}>
-        {/* Visual adjustment */}
         <mesh rotation={[0, 0, isCCW ? 0 : -arcLen]}>
           <torusGeometry args={[radius, tube, 8, 32, arcLen]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
         </mesh>
 
-        {/* Head */}
         <group rotation={[0, 0, isCCW ? arcLen : -arcLen]}>
           <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 2.5 : -2.5]}>
             <coneGeometry args={[tube * 2.5, tube * 4, 16]} />
@@ -145,14 +89,36 @@ const colorMap: Record<CubeColor, string> = {
   orange: '#FF5F00',
 };
 
+// Easing function for smoother animations
+const easeInOutCubic = (t: number): number => {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+};
+
+const GanLogo = () => {
+  const texture = useLoader(THREE.TextureLoader, '/gan-logo.png');
+
+  return (
+    <mesh position={[0, 0, 0.01]} rotation={[0, 0, 0]}>
+      <planeGeometry args={[0.6, 0.6]} />
+      <meshBasicMaterial
+        map={texture}
+        transparent={true}
+        polygonOffset={true}
+        polygonOffsetFactor={-1}
+      />
+    </mesh>
+  );
+};
+
 interface CubeletProps {
   position: [number, number, number];
   colors: (CubeColor | null)[];
   isCenter?: boolean;
   animationRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
+  persistentRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
 }
 
-const Cubelet = ({ position, colors, isCenter = false, animationRotation }: CubeletProps) => {
+const Cubelet = ({ position, colors, isCenter = false, animationRotation, persistentRotation }: CubeletProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const size = 0.95;
   const stickerOffset = 0.48;
@@ -160,36 +126,49 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation }: Cube
   const stickerThickness = 0.015;
   const stickerRadius = 0.1;
 
-  // Apply animation rotation
+  // Apply animation and persistent rotation
   useFrame(() => {
-    if (groupRef.current && animationRotation) {
-      const { axis, angle } = animationRotation;
+    if (groupRef.current) {
+      const q = new THREE.Quaternion();
 
-      const axisVec = new THREE.Vector3(
-        axis === 'x' ? 1 : 0,
-        axis === 'y' ? 1 : 0,
-        axis === 'z' ? 1 : 0
-      );
+      // Base persistent rotation (for centers)
+      if (persistentRotation) {
+        const { axis, angle } = persistentRotation;
+        const axisVec = new THREE.Vector3(
+          axis === 'x' ? 1 : 0,
+          axis === 'y' ? 1 : 0,
+          axis === 'z' ? 1 : 0
+        );
+        q.setFromAxisAngle(axisVec, angle);
+      }
 
-      // Rotate around world origin (0,0,0)
-      // 1. Create rotation quaternion
-      const q = new THREE.Quaternion().setFromAxisAngle(axisVec, angle);
+      // Active move animation offset
+      const activeQ = new THREE.Quaternion();
+      if (animationRotation) {
+        const { axis, angle } = animationRotation;
+        const axisVec = new THREE.Vector3(
+          axis === 'x' ? 1 : 0,
+          axis === 'y' ? 1 : 0,
+          axis === 'z' ? 1 : 0
+        );
+        activeQ.setFromAxisAngle(axisVec, angle);
 
-      // 2. Apply orbit rotation to position
+        // Multiplicative rotation (animation is around world axes in this simulator)
+        q.premultiply(activeQ);
+      }
+
       const pos = new THREE.Vector3(...position);
-      pos.applyQuaternion(q);
+      // Pieces being animated move along their layer arc in world space
+      if (animationRotation) {
+        pos.applyQuaternion(activeQ);
+      }
 
-      // 3. Apply rotation to orientation
       groupRef.current.position.copy(pos);
       groupRef.current.quaternion.copy(q);
-    } else if (groupRef.current) {
-      // Reset to rest state
-      groupRef.current.position.set(...position);
-      groupRef.current.rotation.set(0, 0, 0);
     }
   });
 
-  // Face directions: +X, -X, +Y, -Y, +Z, -Z (R, L, U, D, F, B)
+  // Face directions and rotations
   const faceDirections: [number, number, number][] = [
     [1, 0, 0],   // Right
     [-1, 0, 0],  // Left
@@ -210,14 +189,12 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation }: Cube
 
   return (
     <group ref={groupRef} position={position}>
-      {/* Black cube body */}
       <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
         <meshStandardMaterial color="#1a1a1a" />
       </RoundedBox>
 
-      {/* Stickers */}
       {colors.map((color, index) => {
-        if (!color) return null; // Don't render internal faces
+        if (!color) return null;
 
         const displayColor = colorMap[color];
         const dir = faceDirections[index];
@@ -228,7 +205,6 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation }: Cube
           dir[2] * stickerOffset,
         ];
 
-        // Check if this is the white center (for GAN logo)
         const isWhiteCenter = isCenter && color === 'white' && index === 2;
 
         return (
@@ -240,13 +216,7 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation }: Cube
                 metalness={0.1}
               />
             </RoundedBox>
-            {/* GAN Logo on white center */}
-            {isWhiteCenter && (
-              <mesh position={[0, 0, 0.02]}>
-                <planeGeometry args={[0.4, 0.25]} />
-                <meshBasicMaterial color="#0046AD" transparent opacity={0.9} />
-              </mesh>
-            )}
+            {isWhiteCenter && <GanLogo />}
           </group>
         );
       })}
@@ -254,10 +224,11 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation }: Cube
   );
 };
 
+// ... (GanLogo remains same)
+
 interface AnimatingLayer {
   face: string;
   direction: 1 | -1;
-  progress: number;
 }
 
 interface CubeGroupProps {
@@ -297,140 +268,91 @@ const lerpAngle = (current: number, target: number, factor: number): number => {
   return current + diff * factor;
 };
 
-// Get which cubelets belong to which face for animation
-const getCubeletsForFace = (face: string): { x: number; y: number; z: number }[] => {
-  const cubelets: { x: number; y: number; z: number }[] = [];
-  const offsets = [-1, 0, 1];
-
-  for (let y = 0; y < 3; y++) {
-    for (let z = 0; z < 3; z++) {
-      for (let x = 0; x < 3; x++) {
-        if (x === 1 && y === 1 && z === 1) continue;
-
-        const pos = { x: offsets[x], y: offsets[2 - y], z: offsets[2 - z] };
-
-        switch (face) {
-          case 'U': if (pos.y === 1) cubelets.push(pos); break;
-          case 'D': if (pos.y === -1) cubelets.push(pos); break;
-          case 'R': if (pos.x === 1) cubelets.push(pos); break;
-          case 'L': if (pos.x === -1) cubelets.push(pos); break;
-          case 'F': if (pos.z === 1) cubelets.push(pos); break;
-          case 'B': if (pos.z === -1) cubelets.push(pos); break;
-        }
-      }
-    }
-  }
-  return cubelets;
-};
-
 const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const currentRotation = useRef({ x: 0, y: 0, z: 0 });
-  const [animatingLayer, setAnimatingLayer] = useState<AnimatingLayer | null>(null);
-  const animationProgress = useRef(0);
-  const lastMoveTimestamp = useRef<number | null>(null);
 
-  // Trigger animation when a new move occurs
+  // State for internal cube visualization
+  const [displayFacelets, setDisplayFacelets] = useState<Facelets>(facelets);
+  const [animatingLayer, setAnimatingLayer] = useState<AnimatingLayer | null>(null);
+  const [centerRotations, setCenterRotations] = useState<Record<string, number>>({
+    U: 0, D: 0, L: 0, R: 0, F: 0, B: 0
+  });
+
+  const moveQueue = useRef<AnimatingLayer[]>([]);
+  const animationProgress = useRef(0);
+  const lastProcessedMoveTimestamp = useRef<number | null>(null);
+
+  // Sync with prop facelets when no animations are pending/active
   useEffect(() => {
-    if (lastMove && lastMove.timestamp !== lastMoveTimestamp.current) {
-      lastMoveTimestamp.current = lastMove.timestamp;
-      setAnimatingLayer({
+    if (!animatingLayer && moveQueue.current.length === 0) {
+      setDisplayFacelets(facelets);
+    }
+  }, [facelets, animatingLayer]);
+
+  // Handle new incoming moves from props
+  useEffect(() => {
+    if (lastMove && lastMove.timestamp !== lastProcessedMoveTimestamp.current) {
+      lastProcessedMoveTimestamp.current = lastMove.timestamp;
+      moveQueue.current.push({
         face: lastMove.face,
         direction: lastMove.direction,
-        progress: 0,
       });
-      animationProgress.current = 0;
     }
   }, [lastMove]);
 
-  // Smoothly interpolate orientation with configurable axis mapping
   useFrame((_, delta) => {
-    // Handle layer animation
+    // Process the animation queue
     if (animatingLayer) {
-      animationProgress.current += delta * 8; // Animation speed
+      // Speed up animation if queue is building up
+      const speedMultiplier = Math.min(1 + moveQueue.current.length * 0.5, 4);
+      animationProgress.current += delta * 12 * speedMultiplier; // Slightly faster for responsiveness
+
       if (animationProgress.current >= 1) {
+        // Finish current animation
+        // State was already updated at the start of the animation
         setAnimatingLayer(null);
         animationProgress.current = 0;
       }
+    } else if (moveQueue.current.length > 0) {
+      // Start next move in queue
+      const nextMove = moveQueue.current.shift()!;
+
+      // Update display state IMMEDIATELY at the start of visual animation
+      setDisplayFacelets(prev => applyMove(prev, nextMove.face as any, nextMove.direction));
+
+      // Update center rotations for visual persistence
+      const sign = FACE_ROTATION_SIGNS[nextMove.face] || 1;
+      setCenterRotations(prev => ({
+        ...prev,
+        [nextMove.face]: prev[nextMove.face] + (nextMove.direction * sign * (Math.PI / 2))
+      }));
+
+      setAnimatingLayer(nextMove);
+      animationProgress.current = 0;
     }
 
+    // Handle orientation updates
     if (groupRef.current) {
       if (orientation.quaternion && axisConfig.gyroEnabled) {
-        // use quaternion SLERP for smooth accurate rotation
         const { x, y, z, w } = orientation.quaternion;
-
-        // Standard GAN coordinate system to Three.js mapping
-        // GAN: X=Roll, Y=Pitch, Z=Yaw (usually)
-        // We stick to the raw quaternion and let calibration handle re-orientation if possible.
-        // However, we need to respect the "Calibration" offsets.
-        // Since we are using Quaternions, Euler offsets are tricky. 
-        // We will implement a simple "Tare" mechanism that creates a correction quaternion.
-
-        // Apply calibration: expected that the user hits "Set Neutral"
-        // If we have calibration quaternion, apply it.
-        // We calculate: MappedQ = rawQ * offsetQ (or vice versa? Rotations combine)
-        // Usually: Corrected = Offset * Raw
         let targetQ = new THREE.Quaternion(x, z, -y, w);
-
-        // Let's create the ThreeJS quaternion from raw
-        const currentQ = new THREE.Quaternion(x, z, -y, w);
 
         if (axisConfig.offsetQuaternion) {
           const { x: ox, y: oy, z: oz, w: ow } = axisConfig.offsetQuaternion;
-
-          // The calibration was captured in RAW format (inverse of raw), so we need to construct it carefully.
-          // Our capture logic was: updates.offsetQuaternion = { x: -x, y: -y, z: -z, w: w }; (Inverse of RAW)
-
-          // If we want the FINAL view to be neutral, we need to multiply.
-          // But we already swizzled the raw values to (x, z, -y, w).
-
-          // Let's assume the user holds the cube in "neutral" position and clicks "Set Neutral".
-          // We want that position to show as identity on screen.
-          // Screen Identity = Swizzle(Raw_Neutral * Offset_Raw) ? 
-
-          // Let's try to apply the offset in the original space first, THEN swizzle.
-          // Raw_Neutral = (rx, ry, rz, rw)
-          // Offset = Inverse(Raw_Neutral)
-          // Corrected_Raw = Raw_Current * Offset
-          // Screen_Q = Swizzle(Corrected_Raw)
-
           const offsetQ = new THREE.Quaternion(ox, oy, oz, ow);
           const rawQ = new THREE.Quaternion(x, y, z, w);
-
-          // Standard multiplication order in Three.js: a.multiply(b) means a = a * b (local rotation b)
-          // Quaternion multiplication is non-commutative.
-          // Typically: global_rot = rot * global_offset ?? 
-          // We want the offset to be applied "Before" the rotation or "After"?
-          // If offset is the "zeroing", then Corrected = Offset * Current.
-
           const correctedRaw = offsetQ.clone().multiply(rawQ);
-
-          // Now swizzle to Three.js coords (x, z, -y)
-          // Warning: Swizzling after multiplication might behave differently.
-          // Swizzle Mapping: X->X, Y->Z, Z->-Y
-
           targetQ.set(correctedRaw.x, correctedRaw.z, -correctedRaw.y, correctedRaw.w);
         }
 
         groupRef.current.quaternion.slerp(targetQ, 0.2);
-
-        // Sync euler for backup/debug
-        const euler = new THREE.Euler().setFromQuaternion(groupRef.current.quaternion);
-        currentRotation.current.x = euler.x;
-        currentRotation.current.y = euler.y;
-        currentRotation.current.z = euler.z;
-
       } else if (axisConfig.gyroEnabled && !orientation.quaternion) {
-        // Fallback to Euler logic if no quaternion
-        // Get source values based on config
         const sourceValues = { x: orientation.x, y: orientation.y, z: orientation.z };
-
-        // Apply axis mapping, offsets, and inversion
         let xVal = (sourceValues[axisConfig.xSource] + axisConfig.offsetX) * (axisConfig.xInvert ? -1 : 1);
         let yVal = (sourceValues[axisConfig.ySource] + axisConfig.offsetY) * (axisConfig.yInvert ? -1 : 1);
         let zVal = (sourceValues[axisConfig.zSource] + axisConfig.offsetZ) * (axisConfig.zInvert ? -1 : 1);
 
-        // Normalize angles to prevent sudden jumps
         xVal = normalizeAngle(xVal);
         yVal = normalizeAngle(yVal);
         zVal = normalizeAngle(zVal);
@@ -439,21 +361,23 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
         const targetY = yVal * (Math.PI / 180);
         const targetZ = zVal * (Math.PI / 180);
 
-        // Smooth interpolation with angle wraparound handling
         currentRotation.current.x = lerpAngle(currentRotation.current.x, targetX, 0.15);
         currentRotation.current.y = lerpAngle(currentRotation.current.y, targetY, 0.15);
         currentRotation.current.z = lerpAngle(currentRotation.current.z, targetZ, 0.15);
 
-        groupRef.current.rotation.x = currentRotation.current.x;
-        groupRef.current.rotation.y = currentRotation.current.y;
-        groupRef.current.rotation.z = currentRotation.current.z;
+        groupRef.current.rotation.set(currentRotation.current.x, currentRotation.current.y, currentRotation.current.z);
       }
     }
   });
 
   // Generate cubelet data from facelets
   const cubelets = useMemo(() => {
-    const result: { position: [number, number, number]; colors: (CubeColor | null)[]; isCenter: boolean }[] = [];
+    const result: {
+      position: [number, number, number];
+      colors: (CubeColor | null)[];
+      isCenter: boolean;
+      persistentRotation: { axis: 'x' | 'y' | 'z'; angle: number } | null;
+    }[] = [];
 
     // Position offsets for 3x3 cube
     const offsets = [-1, 0, 1];
@@ -469,6 +393,16 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
 
           // Check if this is a face center piece
           const isCenter = (x === 1 && y === 1) || (y === 1 && z === 1) || (x === 1 && z === 1);
+
+          let persistentRotation: { axis: 'x' | 'y' | 'z'; angle: number } | null = null;
+          if (isCenter) {
+            if (position[1] === 1) persistentRotation = { axis: 'y', angle: centerRotations.U };
+            else if (position[1] === -1) persistentRotation = { axis: 'y', angle: centerRotations.D };
+            else if (position[0] === 1) persistentRotation = { axis: 'x', angle: centerRotations.R };
+            else if (position[0] === -1) persistentRotation = { axis: 'x', angle: centerRotations.L };
+            else if (position[2] === 1) persistentRotation = { axis: 'z', angle: centerRotations.F };
+            else if (position[2] === -1) persistentRotation = { axis: 'z', angle: centerRotations.B };
+          }
 
           // Kociemba facelet indices:
           // U: 0-8 (White, top)
@@ -556,13 +490,13 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             if (!facelets[idx]) console.warn(`Missing facelet at B face idx ${idx} (row ${row}, col ${col})`);
           }
 
-          result.push({ position, colors, isCenter });
+          result.push({ position, colors, isCenter, persistentRotation });
         }
       }
     }
 
     return result;
-  }, [facelets]);
+  }, [displayFacelets, centerRotations]);
 
   // Calculate animation rotation for each cubelet
   const getAnimationRotation = (position: [number, number, number]) => {
@@ -583,20 +517,12 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
     if (!isPartOfLayer) return null;
 
     // Calculate the rotation angle with easing
-    // Calculate the rotation angle with easing (animate from previous state to current state)
-    const progress = Math.min(animationProgress.current, 1);
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-
-    // We receive the new state immediately, so pieces are already at the destination.
-    // We want to visually start them from the previous position.
-    // Standard move is 'direction' (1=CW, -1=CCW).
-    // Rotation required = direction * sign_factor * 90.
-    // Start Angle should be negative of that (undoing the move).
-    // startAngle = -(direction * sign * pi/2).
-
+    // We animate from -90 to 0 because displayFacelets is already at the new state.
+    const progress = easeInOutCubic(Math.min(animationProgress.current, 1));
     const sign = FACE_ROTATION_SIGNS[face] || 1;
-    const startAngle = -direction * sign * (Math.PI / 2);
-    const angle = startAngle * (1 - easeOut);
+
+    // Start at -90 * direction * sign, end at 0
+    const angle = -direction * sign * (Math.PI / 2) * (1 - progress);
 
     // Determine rotation axis
     let axis: 'x' | 'y' | 'z' = 'y';
@@ -616,6 +542,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
           colors={cubelet.colors}
           isCenter={cubelet.isCenter}
           animationRotation={getAnimationRotation(cubelet.position)}
+          persistentRotation={cubelet.persistentRotation}
         />
       ))}
       {nextMove && <ScrambleArrow move={nextMove} />}
@@ -673,8 +600,6 @@ const RubiksCube3D = ({ facelets, orientation, lastMove = null, nextMove = null 
         <directionalLight position={[10, 10, 5]} intensity={1} />
         <directionalLight position={[-10, -10, -5]} intensity={0.3} />
         <pointLight position={[0, 10, 0]} intensity={0.5} />
-
-
 
         <CubeGroup
           facelets={facelets}
