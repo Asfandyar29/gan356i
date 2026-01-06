@@ -15,14 +15,20 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'logo.png', 'icons/*'],
+      devOptions: {
+        enabled: true
+      },
       manifest: {
+        id: '/',
         name: 'GAN Cube Tracker',
         short_name: 'GAN Tracker',
         description: 'Professional real-time tracking for GAN smart cubes',
         theme_color: '#050505',
         background_color: '#050505',
         display: 'standalone',
+        start_url: '/',
+        orientation: 'any',
         icons: [
           {
             src: 'icons/icon-192x192.png',
