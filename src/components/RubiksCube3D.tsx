@@ -354,8 +354,14 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
       animationProgress.current = 0;
     }
 
-    // Handle orientation updates
+    // Handle orientation updates with frame-rate independent smoothing
     if (groupRef.current) {
+      // Smoothing factor - lower is smoother/more "liquid", higher is more responsive
+      // 0.05 means 95% of the distance is covered in ~3 seconds (very slow)
+      // 0.0001 means very responsive
+      const smoothingFactor = 0.001;
+      const t = 1 - Math.pow(smoothingFactor, delta);
+
       if (orientation.quaternion && axisConfig.gyroEnabled) {
         const { x, y, z, w } = orientation.quaternion;
         let targetQ = new THREE.Quaternion(x, z, -y, w);
@@ -368,7 +374,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
           targetQ.set(correctedRaw.x, correctedRaw.z, -correctedRaw.y, correctedRaw.w);
         }
 
-        groupRef.current.quaternion.slerp(targetQ, 0.2);
+        // Use frame-rate independent slerp
+        groupRef.current.quaternion.slerp(targetQ, t);
       } else if (axisConfig.gyroEnabled && !orientation.quaternion) {
         const sourceValues = { x: orientation.x, y: orientation.y, z: orientation.z };
         let xVal = (sourceValues[axisConfig.xSource] + axisConfig.offsetX) * (axisConfig.xInvert ? -1 : 1);
@@ -383,9 +390,10 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
         const targetY = yVal * (Math.PI / 180);
         const targetZ = zVal * (Math.PI / 180);
 
-        currentRotation.current.x = lerpAngle(currentRotation.current.x, targetX, 0.15);
-        currentRotation.current.y = lerpAngle(currentRotation.current.y, targetY, 0.15);
-        currentRotation.current.z = lerpAngle(currentRotation.current.z, targetZ, 0.15);
+        // Use frame-rate independent lerp
+        currentRotation.current.x = lerpAngle(currentRotation.current.x, targetX, t);
+        currentRotation.current.y = lerpAngle(currentRotation.current.y, targetY, t);
+        currentRotation.current.z = lerpAngle(currentRotation.current.z, targetZ, t);
 
         groupRef.current.rotation.set(currentRotation.current.x, currentRotation.current.y, currentRotation.current.z);
       }
