@@ -56,7 +56,7 @@ const ArrowArc = ({ isCCW, isDouble, color, radius, tube }: any) => {
         </mesh>
 
         <group rotation={[0, 0, isCCW ? arcLen : -arcLen]}>
-          <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 2.5 : -2.5]}>
+          <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 0 : Math.PI]}>
             <coneGeometry args={[tube * 2.5, tube * 4, 16]} />
             <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
           </mesh>
@@ -658,11 +658,12 @@ const RubiksCube3D = ({
 
         {/* Contact Shadows for realism */}
         <ContactShadows
+          resolution={256}
           position={[0, -2.5, 0]}
           opacity={0.4}
           scale={10}
           blur={2.5}
-          far={4}
+          far={3}
         />
 
         {/* Glass Floor with Reflections */}
@@ -672,7 +673,7 @@ const RubiksCube3D = ({
             <MeshReflectorMaterial
               mirror={0.7}
               blur={[300, 100]}
-              resolution={1024}
+              resolution={512}
               mixBlur={1}
               mixStrength={40}
               roughness={1}

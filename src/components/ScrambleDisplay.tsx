@@ -4,6 +4,7 @@ interface ScrambleDisplayProps {
   scramble: string[];
   currentIndex?: number;
   lastMoveCorrect?: boolean | null;
+  title?: string;
 }
 
 const getMoveArrow = (move: string) => {
@@ -11,7 +12,7 @@ const getMoveArrow = (move: string) => {
   return "↻";
 };
 
-const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null }: ScrambleDisplayProps) => {
+const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, title = "Solution Scramble" }: ScrambleDisplayProps) => {
   if (scramble.length === 0) {
     return null;
   }
@@ -20,7 +21,7 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null }:
     <div className="w-full glass-surface rounded-2xl p-6 shadow-2xl border border-white/5 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
       <div className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-5 text-center">
-        Solution Scramble
+        {title}
       </div>
       <div className="flex flex-wrap gap-2.5 justify-center items-center">
         {scramble.map((move, index) => {
