@@ -282,6 +282,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
   const moveQueue = useRef<AnimatingLayer[]>([]);
   const animationProgress = useRef(0);
   const lastProcessedMoveTimestamp = useRef<number | null>(null);
+  const pendingFacelets = useRef<Facelets | null>(null);
 
   // Sync with prop facelets when no animations are pending/active
   useEffect(() => {
@@ -306,29 +307,32 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
     if (animatingLayer) {
       // Speed up animation if queue is building up
       const speedMultiplier = Math.min(1 + moveQueue.current.length * 0.5, 4);
-      animationProgress.current += delta * 12 * speedMultiplier; // Slightly faster for responsiveness
+      animationProgress.current += delta * 10 * speedMultiplier;
 
       if (animationProgress.current >= 1) {
-        // Finish current animation
-        // State was already updated at the start of the animation
+        // Finish current animation - NOW apply the new facelets
+        if (pendingFacelets.current) {
+          setDisplayFacelets(pendingFacelets.current);
+          pendingFacelets.current = null;
+        }
         setAnimatingLayer(null);
         animationProgress.current = 0;
       }
     } else if (moveQueue.current.length > 0) {
       // Start next move in queue
-      const nextMove = moveQueue.current.shift()!;
+      const nextMoveData = moveQueue.current.shift()!;
 
-      // Update display state IMMEDIATELY at the start of visual animation
-      setDisplayFacelets(prev => applyMove(prev, nextMove.face as any, nextMove.direction));
+      // Calculate the NEW facelets state but don't display yet - store for after animation
+      pendingFacelets.current = applyMove(displayFacelets, nextMoveData.face as any, nextMoveData.direction);
 
       // Update center rotations for visual persistence
-      const sign = FACE_ROTATION_SIGNS[nextMove.face] || 1;
+      const sign = FACE_ROTATION_SIGNS[nextMoveData.face] || 1;
       setCenterRotations(prev => ({
         ...prev,
-        [nextMove.face]: prev[nextMove.face] + (nextMove.direction * sign * (Math.PI / 2))
+        [nextMoveData.face]: prev[nextMoveData.face] + (nextMoveData.direction * sign * (Math.PI / 2))
       }));
 
-      setAnimatingLayer(nextMove);
+      setAnimatingLayer(nextMoveData);
       animationProgress.current = 0;
     }
 
@@ -517,12 +521,12 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
     if (!isPartOfLayer) return null;
 
     // Calculate the rotation angle with easing
-    // We animate from -90 to 0 because displayFacelets is already at the new state.
+    // Animate from 0 to 90 degrees - displayFacelets shows OLD state during animation
     const progress = easeInOutCubic(Math.min(animationProgress.current, 1));
     const sign = FACE_ROTATION_SIGNS[face] || 1;
 
-    // Start at -90 * direction * sign, end at 0
-    const angle = -direction * sign * (Math.PI / 2) * (1 - progress);
+    // Start at 0, end at 90 * direction * sign
+    const angle = direction * sign * (Math.PI / 2) * progress;
 
     // Determine rotation axis
     let axis: 'x' | 'y' | 'z' = 'y';
