@@ -11,6 +11,7 @@ import RubiksCube3D from '@/components/RubiksCube3D';
 import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
 import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
 import { toast } from 'sonner';
+import NavBar from '@/components/NavBar';
 
 const CubeTracker = () => {
   const {
@@ -56,6 +57,17 @@ const CubeTracker = () => {
   const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const solveMetaData = useRef({ index: 0, time: 0 });
+
+  // Performance Settings
+  const [showReflections, setShowReflections] = useState(() => {
+    const saved = localStorage.getItem('cube_show_reflections');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleToggleReflections = useCallback((value: boolean) => {
+    setShowReflections(value);
+    localStorage.setItem('cube_show_reflections', String(value));
+  }, []);
   useEffect(() => {
     if (!isDemoMode) return;
 
@@ -348,28 +360,38 @@ const CubeTracker = () => {
         onConfirmMacAddress={confirmMacAddress}
         onCancelConnection={cancelConnection}
         onClearMacAddress={clearMacAddress}
+        showReflections={showReflections}
+        onToggleReflections={handleToggleReflections}
       />
     );
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <header className="text-center space-y-2 animate-fade-in">
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+    <div className="min-h-screen bg-background text-foreground pt-20 pb-12 px-4 md:px-8 selection:bg-primary/20">
+      <NavBar />
+
+      <div className="max-w-6xl mx-auto space-y-10">
+        {/* Header - Subtle and Minimal */}
+        <header className="text-center space-y-3 animate-fade-in group">
+          <div className="inline-block p-1 px-3 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary uppercase tracking-widest mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+            Professional Speedcubing
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground/90 drop-shadow-sm">
             GAN Cube Tracker
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <div className="flex justify-center items-center gap-2 text-muted-foreground text-sm font-medium">
             {isDemoMode ? (
-              <span className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-warning/10 border border-warning/20">
                 <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-                Demo Mode - Connect your cube for full features
+                Demo Mode
               </span>
             ) : (
-              'Real-time cube tracking and timing'
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 border border-success/20">
+                <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_8px_rgba(0,165,80,0.5)]" />
+                Live Tracking Active
+              </span>
             )}
-          </p>
+          </div>
         </header>
 
         {/* Timer */}
@@ -438,21 +460,31 @@ const CubeTracker = () => {
           </div>
         )}
 
-        {/* 3D Cube View */}
+        {/* 3D Cube View - Glass Style Container */}
         <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
-          <div className="card-gradient rounded-2xl p-4 shadow-card overflow-hidden">
-            <Suspense fallback={
-              <div className="w-full h-[400px] md:h-[500px] flex items-center justify-center">
-                <div className="text-muted-foreground">Loading 3D view...</div>
-              </div>
-            }>
-              <RubiksCube3D
-                facelets={activeState.facelets}
-                orientation={activeState.orientation}
-                lastMove={activeState.lastMove}
-                nextMove={flatScramble[scrambleIndex]}
-              />
-            </Suspense>
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-transparent to-primary/20 rounded-[2rem] blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
+            <div className="relative card-gradient rounded-[2rem] p-1 shadow-2xl overflow-hidden glass-surface border border-white/10">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+              <Suspense fallback={
+                <div className="w-full h-[400px] md:h-[600px] flex items-center justify-center bg-black/5">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    <div className="text-muted-foreground font-medium animate-pulse">Initializing 3D Engine...</div>
+                  </div>
+                </div>
+              }>
+                <div className="w-full h-[450px] md:h-[650px]">
+                  <RubiksCube3D
+                    facelets={activeState.facelets}
+                    orientation={activeState.orientation}
+                    lastMove={activeState.lastMove}
+                    nextMove={flatScramble[scrambleIndex]}
+                    showReflections={showReflections}
+                  />
+                </div>
+              </Suspense>
+            </div>
           </div>
         </div>
 

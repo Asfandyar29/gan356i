@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { OrbitControls, RoundedBox } from '@react-three/drei';
+import { OrbitControls, RoundedBox, MeshReflectorMaterial, ContactShadows, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
@@ -581,9 +581,16 @@ interface RubiksCube3DProps {
   orientation: CubeOrientation;
   lastMove?: MoveEvent | null;
   nextMove?: string | null;
+  showReflections?: boolean;
 }
 
-const RubiksCube3D = ({ facelets, orientation, lastMove = null, nextMove = null }: RubiksCube3DProps) => {
+const RubiksCube3D = ({
+  facelets,
+  orientation,
+  lastMove = null,
+  nextMove = null,
+  showReflections = true
+}: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
 
@@ -616,31 +623,69 @@ const RubiksCube3D = ({ facelets, orientation, lastMove = null, nextMove = null 
         currentOrientation={orientation}
       />
       <Canvas
-        camera={{ position: [4, 3, 4], fov: 45 }}
-        gl={{ antialias: true, failIfMajorPerformanceCaveat: false }}
+        shadows
+        camera={{ position: [5, 4, 5], fov: 40 }}
+        gl={{ antialias: true, stencil: false, depth: true, failIfMajorPerformanceCaveat: false }}
         onCreated={({ gl }) => {
           gl.setClearColor('#000000', 0);
         }}
       >
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 10, 5]} intensity={1} />
-        <directionalLight position={[-10, -10, -5]} intensity={0.3} />
-        <pointLight position={[0, 10, 0]} intensity={0.5} />
+        <color attach="background" args={['#050505']} />
 
-        <CubeGroup
-          facelets={facelets}
-          orientation={orientation}
-          axisConfig={axisConfig}
-          lastMove={lastMove}
-          nextMove={nextMove}
+        <ambientLight intensity={0.4} />
+        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
+        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#44aaff" />
+
+        <Environment preset="city" />
+
+        <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
+          <CubeGroup
+            facelets={facelets}
+            orientation={orientation}
+            axisConfig={axisConfig}
+            lastMove={lastMove}
+            nextMove={nextMove}
+          />
+        </Float>
+
+        {/* Contact Shadows for realism */}
+        <ContactShadows
+          position={[0, -2.5, 0]}
+          opacity={0.4}
+          scale={10}
+          blur={2.5}
+          far={4}
         />
+
+        {/* Glass Floor with Reflections */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.51, 0]} receiveShadow>
+          <planeGeometry args={[20, 20]} />
+          {showReflections ? (
+            <MeshReflectorMaterial
+              mirror={0.7}
+              blur={[300, 100]}
+              resolution={1024}
+              mixBlur={1}
+              mixStrength={40}
+              roughness={1}
+              depthScale={1.2}
+              minDepthThreshold={0.4}
+              maxDepthThreshold={1.4}
+              color="#151515"
+              metalness={0.5}
+            />
+          ) : (
+            <meshStandardMaterial color="#101010" opacity={0.6} transparent />
+          )}
+        </mesh>
 
         <OrbitControls
           enablePan={false}
           enableZoom={true}
-          minDistance={5}
-          maxDistance={12}
+          minDistance={6}
+          maxDistance={15}
           autoRotate={false}
+          makeDefault
         />
       </Canvas>
     </div>

@@ -109,6 +109,11 @@
   .card-gradient {
     background: var(--gradient-card);
   }
+
+  .glass-surface {
+    @apply backdrop-blur-xl bg-white/5 border border-white/10;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
 }
 
 /* Timer font - monospace for consistent digit width */

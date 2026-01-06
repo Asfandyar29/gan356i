@@ -17,57 +17,52 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null }:
   }
 
   return (
-    <div className="w-full card-gradient rounded-xl p-6 shadow-card border border-border/50">
-      <div className="text-sm uppercase tracking-wider text-muted-foreground mb-4 text-center">
-        Scramble Sequence
+    <div className="w-full glass-surface rounded-2xl p-6 shadow-2xl border border-white/5 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+      <div className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-5 text-center">
+        Solution Scramble
       </div>
-      <div className="flex flex-wrap gap-3 justify-center items-center">
+      <div className="flex flex-wrap gap-2.5 justify-center items-center">
         {scramble.map((move, index) => {
-          let className = "text-xl md:text-2xl font-mono font-bold px-3 py-1.5 rounded transition-all duration-300";
+          let className = "text-xl md:text-2xl font-bold px-3 py-1.5 rounded-xl transition-all duration-300 min-w-[3rem] text-center";
 
           if (index < currentIndex) {
-            // Completed moves
-            className += " text-muted-foreground/40 bg-muted/10";
+            className += " text-muted-foreground/20 bg-transparent line-through decoration-muted-foreground/30";
           } else if (index === currentIndex) {
-            // Current move
             if (lastMoveCorrect === false) {
-              // Error state
-              className += " text-destructive bg-destructive/20 ring-2 ring-destructive shadow-[0_0_15px_rgba(239,68,68,0.5)] scale-110";
+              className += " text-destructive bg-destructive/10 ring-1 ring-destructive/30 shadow-[0_0_20px_rgba(239,68,68,0.2)] scale-110 translate-y-[-2px]";
             } else {
-              // Active state
-              className += " text-primary bg-primary/20 ring-2 ring-primary shadow-[0_0_15px_rgba(59,130,246,0.5)] scale-110";
+              className += " text-primary bg-primary/10 ring-1 ring-primary/40 shadow-[0_0_20px_rgba(59,130,246,0.3)] scale-110 translate-y-[-2px]";
             }
           } else {
-            // Future moves
-            className += " text-foreground/80 bg-muted/30 border border-border/30";
+            className += " text-foreground/70 bg-white/5 border border-white/5";
           }
 
           return (
-            <span key={index} className={className}>
-              {move}
+            <div key={index} className="relative group">
+              <span className={className}>
+                {move}
+              </span>
               {index === currentIndex && (
-                <span className="ml-1 inline-block text-xs opacity-70">
-                  {getMoveArrow(move)}
-                </span>
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-primary rounded-full blur-[1px] animate-pulse" />
               )}
-            </span>
+            </div>
           );
         })}
       </div>
 
-      {currentIndex === scramble.length ? (
-        <div className="mt-4 text-center text-success animate-fade-in font-medium">
-          Scramble Complete! Proceed to Inspection.
-        </div>
-      ) : lastMoveCorrect === false ? (
-        <div className="mt-4 text-center text-destructive animate-fade-in font-bold">
-          Incorrect Move! Undo and try again.
-        </div>
-      ) : (
-        <div className="mt-4 text-center text-muted-foreground animate-fade-in text-sm opacity-0 md:opacity-100">
-          Follow the highlighted move
-        </div>
-      )}
+      <div className="mt-6 text-center animate-fade-in text-[10px] font-bold uppercase tracking-[0.2em]">
+        {currentIndex === scramble.length ? (
+          <span className="text-success flex items-center justify-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+            Ready to Solve
+          </span>
+        ) : lastMoveCorrect === false ? (
+          <span className="text-destructive font-black tracking-wider">Incorrect Input</span>
+        ) : (
+          <span className="text-muted-foreground/50">Follow the highlighted sequence</span>
+        )}
+      </div>
     </div>
   );
 };
