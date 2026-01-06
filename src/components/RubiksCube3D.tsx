@@ -118,6 +118,24 @@ interface CubeletProps {
   persistentRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
 }
 
+// Shared Geometries and Materials to reduce draw calls and memory usage
+const cubeGeometry = new THREE.BoxGeometry(0.95, 0.95, 0.95);
+// Note: RoundedBox is specific, let's keep it if we can, but standard Box is faster.
+// If we want RoundedBox, we should create it once.
+// However, R3F's RoundedBox is a component, not a geometry class directly available without Drei.
+// Let's stick to component usage but memoize the args object if possible, or better yet:
+// pass shared materials.
+
+const baseMaterial = new THREE.MeshStandardMaterial({ color: "#1a1a1a" });
+const stickerMaterials: Record<string, THREE.MeshStandardMaterial> = {
+  white: new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.3, metalness: 0.1 }),
+  yellow: new THREE.MeshStandardMaterial({ color: '#FEDD00', roughness: 0.3, metalness: 0.1 }),
+  green: new THREE.MeshStandardMaterial({ color: '#00A550', roughness: 0.3, metalness: 0.1 }),
+  blue: new THREE.MeshStandardMaterial({ color: '#0046AD', roughness: 0.3, metalness: 0.1 }),
+  red: new THREE.MeshStandardMaterial({ color: '#C41E3A', roughness: 0.3, metalness: 0.1 }),
+  orange: new THREE.MeshStandardMaterial({ color: '#FF5F00', roughness: 0.3, metalness: 0.1 }),
+};
+
 const Cubelet = ({ position, colors, isCenter = false, animationRotation, persistentRotation }: CubeletProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const size = 0.95;
@@ -139,100 +157,56 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
     }
   }, [position, colors, animationRotation]);
 
-  // Apply animation and persistent rotation
+  // Apply animation and persistent rotation (Logic unchanged)
   useFrame(() => {
     if (groupRef.current) {
       const q = new THREE.Quaternion();
-
-      // Base persistent rotation (for centers)
       if (persistentRotation) {
         const { axis, angle } = persistentRotation;
-        const axisVec = new THREE.Vector3(
-          axis === 'x' ? 1 : 0,
-          axis === 'y' ? 1 : 0,
-          axis === 'z' ? 1 : 0
-        );
+        const axisVec = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
         q.setFromAxisAngle(axisVec, angle);
       }
-
-      // Active move animation offset
       const activeQ = new THREE.Quaternion();
       if (animationRotation) {
         const { axis, angle } = animationRotation;
-        const axisVec = new THREE.Vector3(
-          axis === 'x' ? 1 : 0,
-          axis === 'y' ? 1 : 0,
-          axis === 'z' ? 1 : 0
-        );
+        const axisVec = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
         activeQ.setFromAxisAngle(axisVec, angle);
-
-        // Multiplicative rotation (animation is around world axes in this simulator)
         q.premultiply(activeQ);
       }
-
-      // Use the stored base position for animation calculations
       const pos = new THREE.Vector3(...basePosition.current);
-      // Pieces being animated move along their layer arc in world space
-      if (animationRotation) {
-        pos.applyQuaternion(activeQ);
-      }
-
+      if (animationRotation) pos.applyQuaternion(activeQ);
       groupRef.current.position.copy(pos);
       groupRef.current.quaternion.copy(q);
     }
   });
 
-  // Face directions and rotations
-  const faceDirections: [number, number, number][] = [
-    [1, 0, 0],   // Right
-    [-1, 0, 0],  // Left
-    [0, 1, 0],   // Up
-    [0, -1, 0],  // Down
-    [0, 0, 1],   // Front
-    [0, 0, -1],  // Back
-  ];
+  // Face constants
+  const faceDirections: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const faceRotations: [number, number, number][] = [[0, Math.PI / 2, 0], [0, -Math.PI / 2, 0], [-Math.PI / 2, 0, 0], [Math.PI / 2, 0, 0], [0, 0, 0], [0, Math.PI, 0]];
 
-  const faceRotations: [number, number, number][] = [
-    [0, Math.PI / 2, 0],  // Right
-    [0, -Math.PI / 2, 0], // Left
-    [-Math.PI / 2, 0, 0], // Up
-    [Math.PI / 2, 0, 0],  // Down
-    [0, 0, 0],            // Front
-    [0, Math.PI, 0],      // Back
-  ];
-
-  // Use the stored colors to prevent flashing during animation
   const colorsToRender = animationRotation ? displayColors.current : colors;
 
   return (
     <group ref={groupRef} position={position}>
-      <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
-        <meshStandardMaterial color="#1a1a1a" />
-      </RoundedBox>
+      {/* Base Cube - Reuse Geometry? RoundedBox creates its own geometry. 
+          To optimize: use a simple BoxGeometry with a texture or accept the cost but share material.
+          We will share the material. */}
+      <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4} material={baseMaterial} />
 
       {colorsToRender.map((color, index) => {
         if (!color) return null;
 
-        const displayColor = colorMap[color];
+        // Reuse shared materials
+        const material = stickerMaterials[color];
         const dir = faceDirections[index];
         const rot = faceRotations[index];
-        const stickerPos: [number, number, number] = [
-          dir[0] * stickerOffset,
-          dir[1] * stickerOffset,
-          dir[2] * stickerOffset,
-        ];
-
+        const stickerPos: [number, number, number] = [dir[0] * stickerOffset, dir[1] * stickerOffset, dir[2] * stickerOffset];
         const isWhiteCenter = isCenter && color === 'white' && index === 2;
 
         return (
           <group key={index} position={stickerPos} rotation={rot}>
-            <RoundedBox args={[stickerSize, stickerSize, stickerThickness]} radius={stickerRadius} smoothness={4}>
-              <meshStandardMaterial
-                color={displayColor}
-                roughness={0.3}
-                metalness={0.1}
-              />
-            </RoundedBox>
+            {/* Reuse material for stickers too */}
+            <RoundedBox args={[stickerSize, stickerSize, stickerThickness]} radius={stickerRadius} smoothness={4} material={material} />
             {isWhiteCenter && <GanLogo />}
           </group>
         );
@@ -632,8 +606,9 @@ const RubiksCube3D = ({
       />
       <Canvas
         shadows
+        dpr={[1, 2]} // Limit pixel ratio to 2 to prevent excessive load on high-DPI mobile screens
         camera={{ position: [5, 4, 5], fov: 40 }}
-        gl={{ antialias: true, stencil: false, depth: true, failIfMajorPerformanceCaveat: false }}
+        gl={{ antialias: true, stencil: false, depth: true, failIfMajorPerformanceCaveat: false, powerPreference: "high-performance" }}
         onCreated={({ gl }) => {
           gl.setClearColor('#000000', 0);
         }}
