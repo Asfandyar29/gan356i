@@ -4,6 +4,8 @@ import { Switch } from '@/components/ui/switch';
 import { RotateCcw, Settings, X, Move3D, Crosshair } from 'lucide-react';
 import { CubeOrientation } from '@/types/cube';
 
+const STORAGE_KEY = 'rubiks-axis-config';
+
 export interface AxisConfig {
   xSource: 'x' | 'y' | 'z';
   ySource: 'x' | 'y' | 'z';
@@ -16,6 +18,7 @@ export interface AxisConfig {
   offsetY: number;
   offsetZ: number;
   offsetQuaternion: { x: number; y: number; z: number; w: number } | null;
+  quality: 'low' | 'medium' | 'high';
 }
 
 // Default config based on user's working settings:
@@ -34,14 +37,14 @@ const defaultConfig: AxisConfig = {
   offsetY: 0,
   offsetZ: 0,
   offsetQuaternion: null,
+  quality: 'high', // Default for desktop
 };
 
-const STORAGE_KEY = 'cube-axis-config';
-
-interface AxisCalibrationProps {
-  onConfigChange: (config: AxisConfig) => void;
-  currentOrientation?: CubeOrientation;
-}
+// Simple mobile detection
+const isMobile = () => {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
 
 export const loadAxisConfig = (): AxisConfig => {
   try {
@@ -53,8 +56,19 @@ export const loadAxisConfig = (): AxisConfig => {
   } catch {
     // ignore
   }
+
+  // If no saved config and on mobile, default to low quality
+  if (isMobile()) {
+    return { ...defaultConfig, quality: 'low' };
+  }
+
   return defaultConfig;
 };
+
+interface AxisCalibrationProps {
+  onConfigChange: (config: AxisConfig) => void;
+  currentOrientation: CubeOrientation | null;
+}
 
 const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibrationProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -125,7 +139,7 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
   // Compact toggle button when closed
   if (!isOpen) {
     return (
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
         <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-border">
           <Move3D className="w-4 h-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Gyro</span>
@@ -169,6 +183,29 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
           checked={config.gyroEnabled}
           onCheckedChange={(checked) => updateConfig({ gyroEnabled: checked })}
         />
+      </div>
+
+      {/* Quality Settings */}
+      <div className="mb-4 space-y-2">
+        <label className="text-xs text-muted-foreground">Performance Mode</label>
+        <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+          {(['low', 'medium', 'high'] as const).map((q) => (
+            <Button
+              key={q}
+              variant={config.quality === q ? "default" : "ghost"}
+              size="sm"
+              className="flex-1 h-7 text-[10px] uppercase font-bold rounded-md"
+              onClick={() => updateConfig({ quality: q })}
+            >
+              {q}
+            </Button>
+          ))}
+        </div>
+        {config.quality === 'low' && (
+          <p className="text-[10px] text-muted-foreground/80 leading-tight">
+            Optimized for mobile: reflections and shadows disabled.
+          </p>
+        )}
       </div>
 
       {config.gyroEnabled && (

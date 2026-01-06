@@ -116,10 +116,15 @@ interface CubeletProps {
   isCenter?: boolean;
   animationRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
   persistentRotation?: { axis: 'x' | 'y' | 'z'; angle: number } | null;
+  quality: 'low' | 'medium' | 'high';
 }
 
-const Cubelet = ({ position, colors, isCenter = false, animationRotation, persistentRotation }: CubeletProps) => {
+const Cubelet = ({ position, colors, isCenter = false, animationRotation, persistentRotation, quality }: CubeletProps) => {
   const groupRef = useRef<THREE.Group>(null);
+
+  // Quality-based geometry settings
+  const smoothness = quality === 'high' ? 4 : (quality === 'medium' ? 2 : 1);
+
   const size = 0.95;
   const stickerOffset = 0.48;
   const stickerSize = 0.82;
@@ -206,8 +211,8 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
 
   return (
     <group ref={groupRef} position={position}>
-      <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
-        <meshStandardMaterial color="#1a1a1a" />
+      <RoundedBox args={[size, size, size]} radius={0.08} smoothness={smoothness}>
+        <meshStandardMaterial color="#1a1a1a" roughness={quality === 'low' ? 1 : 0.8} />
       </RoundedBox>
 
       {colorsToRender.map((color, index) => {
@@ -226,11 +231,11 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
 
         return (
           <group key={index} position={stickerPos} rotation={rot}>
-            <RoundedBox args={[stickerSize, stickerSize, stickerThickness]} radius={stickerRadius} smoothness={4}>
+            <RoundedBox args={[stickerSize, stickerSize, stickerThickness]} radius={stickerRadius} smoothness={smoothness}>
               <meshStandardMaterial
                 color={displayColor}
-                roughness={0.3}
-                metalness={0.1}
+                roughness={quality === 'low' ? 1 : 0.3}
+                metalness={quality === 'low' ? 0 : 0.1}
               />
             </RoundedBox>
             {isWhiteCenter && <GanLogo />}
@@ -576,6 +581,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             isCenter={cubelet.isCenter}
             animationRotation={getAnimationRotation(cubelet.position)}
             persistentRotation={cubelet.persistentRotation}
+            quality={axisConfig.quality}
           />
         );
       })}
@@ -597,10 +603,11 @@ const RubiksCube3D = ({
   orientation,
   lastMove = null,
   nextMove = null,
-  showReflections = true
 }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
+
+  const quality = axisConfig.quality;
 
   useEffect(() => {
     setWebGLSupported(isWebGLAvailable());
@@ -612,7 +619,7 @@ const RubiksCube3D = ({
 
   if (!webGLSupported) {
     return (
-      <div className="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-muted/50 rounded-lg border border-border">
+      <div className="w-full h-full min-h-[300px] flex items-center justify-center bg-muted/50 rounded-lg border border-border">
         <div className="text-center p-6">
           <div className="text-6xl mb-4">🎲</div>
           <h3 className="text-lg font-semibold text-foreground mb-2">3D View Unavailable</h3>
@@ -625,15 +632,21 @@ const RubiksCube3D = ({
   }
 
   return (
-    <div className="w-full h-[400px] md:h-[500px] relative">
+    <div className="w-full h-full flex flex-col relative">
       <AxisCalibration
         onConfigChange={handleAxisConfigChange}
         currentOrientation={orientation}
       />
       <Canvas
-        shadows
+        shadows={quality !== 'low'}
         camera={{ position: [5, 4, 5], fov: 40 }}
-        gl={{ antialias: true, stencil: false, depth: true, failIfMajorPerformanceCaveat: false }}
+        gl={{
+          antialias: quality === 'high',
+          powerPreference: 'high-performance',
+          stencil: false,
+          depth: true,
+          failIfMajorPerformanceCaveat: false
+        }}
         onCreated={({ gl }) => {
           gl.setClearColor('#000000', 0);
         }}
@@ -657,19 +670,21 @@ const RubiksCube3D = ({
         </Float>
 
         {/* Contact Shadows for realism */}
-        <ContactShadows
-          resolution={256}
-          position={[0, -2.5, 0]}
-          opacity={0.4}
-          scale={10}
-          blur={2.5}
-          far={3}
-        />
+        {quality !== 'low' && (
+          <ContactShadows
+            resolution={quality === 'high' ? 256 : 128}
+            position={[0, -2.5, 0]}
+            opacity={0.4}
+            scale={10}
+            blur={2.5}
+            far={3}
+          />
+        )}
 
         {/* Glass Floor with Reflections */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.51, 0]} receiveShadow>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.51, 0]} receiveShadow={quality !== 'low'}>
           <planeGeometry args={[20, 20]} />
-          {showReflections ? (
+          {quality === 'high' ? (
             <MeshReflectorMaterial
               mirror={0.7}
               blur={[300, 100]}

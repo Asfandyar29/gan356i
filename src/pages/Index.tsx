@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, Suspense, useRef, useMemo } from 'react';
+import { X } from 'lucide-react';
 import { useCubeConnection } from '@/hooks/useCubeConnection';
 import { useTimer } from '@/hooks/useTimer';
 import { generateScramble, isCubeSolved, createSolvedCube, CubeState } from '@/types/cube';
@@ -32,7 +33,25 @@ const CubeTracker = () => {
     clearMacAddress,
   } = useCubeConnection();
 
-  const { time, timerState, startTimer, stopTimer, resetTimer, formattedTime } = useTimer();
+  // Check for WebGL support at the top to follow hook rules
+  const webGLSupported = useMemo(() => {
+    try {
+      if (typeof window === 'undefined') return true;
+      const canvas = document.createElement('canvas');
+      return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  const {
+    time,
+    timerState,
+    startTimer,
+    stopTimer,
+    resetTimer,
+    formattedTime,
+  } = useTimer();
   const [scramble, setScramble] = useState<string[]>([]);
   const [isScrambled, setIsScrambled] = useState(false);
   const [scrambleFollowed, setScrambleFollowed] = useState(false);
@@ -60,17 +79,13 @@ const CubeTracker = () => {
 
   const solveMetaData = useRef({ index: 0, time: 0 });
   const [isRescueMode, setIsRescueMode] = useState(false);
+  const [wrongMoves, setWrongMoves] = useState<string[]>([]);
+  const lastProcessedMoveCount = useRef(0);
 
-  // Performance Settings
-  const [showReflections, setShowReflections] = useState(() => {
-    const saved = localStorage.getItem('cube_show_reflections');
-    return saved !== null ? saved === 'true' : true;
-  });
+  // Active state (real connection or demo)
+  const activeState = isDemoMode ? demoState : cubeState;
+  const isConnected = isDemoMode || connectionState === 'connected';
 
-  const handleToggleReflections = useCallback((value: boolean) => {
-    setShowReflections(value);
-    localStorage.setItem('cube_show_reflections', String(value));
-  }, []);
   useEffect(() => {
     if (!isDemoMode) return;
 
@@ -98,105 +113,14 @@ const CubeTracker = () => {
     setLastMoveCorrect(null);
     setInspectionState('idle');
     setInspectionTime(15000);
-    setInspectionTime(15000);
     setWrongMoves([]); // Reset wrong moves stack
     resetTimer();
 
-    // Reset inspection timer
     if (inspectionIntervalRef.current) {
       clearInterval(inspectionIntervalRef.current);
       inspectionIntervalRef.current = null;
     }
   }, [resetTimer]);
-
-  // Active state (real connection or demo)
-  const activeState = isDemoMode ? demoState : cubeState;
-  const isConnected = isDemoMode || connectionState === 'connected';
-
-  // --- Guided Scrambling Logic ---
-  useEffect(() => {
-    if (!activeState.lastMove || scramble.length === 0 || scrambleFollowed) return;
-
-    const targetMove = scramble[scrambleIndex];
-    // Compare notation (e.g. "R", "R'", "R2")
-    // Note: Our move event provides 'notation' which is "R" or "R'".
-    // Scramble might have "R2". "R2" can be solved by doing "R" then "R".
-    // Or if the user does "R2" (double turn) directly? The cube usually reports two "R" events quickly.
-    // Let's handle simple matching first.
-
-    const performedMove = activeState.lastMove.notation;
-
-    let isMatch = performedMove === targetMove;
-
-    // Handle "2" moves (e.g. target U2, user does U then U)
-    // Complex implementation omitted for robustness, let's stick to 1-move matching.
-    // If target is U2, we expect user to do U twice? Or just match U?
-    // Let's rely on standard matching. If target is U2, user must do U... wait.
-    // If I do U, then U, I get two U events.
-    // Currently generator makes standard moves.
-
-    // Simple logic:
-    // If target is "R2", and user does "R", we stay on "R2" but maybe mark partial?
-    // Let's simplify: Standard 20 move scramble usually has R, R', R2.
-    // If target is R2, we wait for TWO R moves?
-    // Let's just match exact string for now to be safe, BUT R2 logic needs state.
-
-    // Better approach:
-    // Just verify if the move performed is consistent with the target face/direction.
-    // If target is R2, user sends R. That is Correct (partial).
-    // If target is R, user sends R. Correct (complete).
-    // If target is R', user sends R. Incorrect.
-
-    if (targetMove && targetMove.endsWith('2')) {
-      // Allow splitting 2 moves
-      const base = targetMove[0];
-      if (performedMove === base) {
-        // It's a match, but we need another one.
-        // This requires tracking "partial" state.
-        // For now, let's just accept single moves if they match the face/dir.
-        // Actually, let's treat '2' as a special case.
-        // If we receive "R" and target is "R2", we transform target to "R" for next step?
-      }
-    }
-
-    // Let's implement EXACT matching for V1 to ensure precision.
-    // User must perform the move exactly? No, smart cube sends single moves.
-    // If I do R2 fast, I get two R events.
-    // So if target is R2:
-    // 1. User does R. Match! Remainder is R.
-    // 2. User does R. Match! Remainder done.
-
-    // So we need to modify scramble array? No, just track index.
-    // If target==R2 and move==R:
-    // We increment index? No, we need to track "sub-index".
-    // Hack: Modify current scramble item in place? No.
-
-    // Let's assume standard moves R/R'/L/L' etc match perfectly.
-    // For '2' moves:
-    // If target is X2.
-    // If user does X, we treat it as valid, but DON'T advance index yet?
-    // We need to mutate the scramble display visually?
-
-    // SIMPLIFICATION:
-    // If target is X2, and user does X.
-    // We update visual to show 'X' remaining?
-    // Let's just advance if it matches face.
-    // (This is a loose scramble check, but acceptable for V1).
-
-    // STICK TO STRICT WRITER LOGIC:
-    // Comparing `performedMove` to `targetMove`.
-    // If target is `R2`, and user does `R`.
-    // We treat this as "Correct - Partial".
-    // We need to update state to say "1 turn left on current move".
-    // For now, let's just use exact string match which means user might get frustrated with R2.
-    // REVISION: The `generateScramble` produces R, R', R2.
-    // Cube ONLY produces R, R'.
-    // So if target is R2, valid inputs are R+R.
-    // We handle this by splitting the scramble internally?
-
-    // Let's unpack the scramble into single moves for tracking!
-    // Great idea.
-  }, [activeState.lastMove]);
 
   // Unpack scramble on generation for tracking
   const [flatScramble, setFlatScramble] = useState<string[]>([]);
@@ -213,10 +137,6 @@ const CubeTracker = () => {
     setFlatScramble(flat);
   }, [scramble]);
 
-  // Stack of wrong moves to enforce undoing errors
-  const [wrongMoves, setWrongMoves] = useState<string[]>([]);
-  const lastProcessedMoveCount = useRef(0);
-
   // Helper to invert a move string
   const invertMove = (move: string) => {
     if (move.endsWith("'")) return move.slice(0, -1);
@@ -226,58 +146,43 @@ const CubeTracker = () => {
   // Guided Scramble Check
   useEffect(() => {
     if (!activeState.lastMove || flatScramble.length === 0 || scrambleFollowed) return;
-    if (activeState.moveCount === 0) return; // Ignore initial state
-
-    // Check if we already processed this move
+    if (activeState.moveCount === 0) return;
     if (activeState.moveCount === lastProcessedMoveCount.current) return;
     lastProcessedMoveCount.current = activeState.moveCount;
 
     const move = activeState.lastMove.notation;
     const target = flatScramble[scrambleIndex];
 
-    // If we have wrong moves stacked up
     if (wrongMoves.length > 0) {
       const lastWrong = wrongMoves[wrongMoves.length - 1];
       if (move === invertMove(lastWrong)) {
-        // User undid the last wrong move
         setWrongMoves(prev => {
           const newStack = prev.slice(0, -1);
-          // If stack becomes empty, we are back to neutral (waiting for target)
-          // But effectively we just recovered, so let's set lastMoveCorrect to null or true?
-          // If we set it to null, the UI might lose the "Wrong" status.
           if (newStack.length === 0) setLastMoveCorrect(null);
           return newStack;
         });
       } else {
-        // User made another wrong move
         setWrongMoves(prev => [...prev, move]);
       }
       return;
     }
 
-    // Normal check (no wrong moves pending)
     if (move === target) {
       setLastMoveCorrect(true);
       const nextIndex = scrambleIndex + 1;
       setScrambleIndex(nextIndex);
 
       if (nextIndex >= flatScramble.length) {
-        // Scramble or Solution Complete!
         setScrambleFollowed(true);
-
         if (isRescueMode) {
           toast.success("Cube Solved!");
-          // Reset everything for idle state
           setScramble([]);
           setScrambleFollowed(false);
           setIsRescueMode(false);
         } else {
           toast.success("Scramble Complete! Inspection starting...");
-
-          // Start Inspection Timer
           setInspectionState('running');
           setInspectionTime(15000);
-
           inspectionIntervalRef.current = window.setInterval(() => {
             setInspectionTime(t => {
               if (t <= 0) {
@@ -291,87 +196,57 @@ const CubeTracker = () => {
         }
       }
     } else {
-      // User made a mistake
       setLastMoveCorrect(false);
       setWrongMoves([move]);
     }
   }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves, isRescueMode]);
 
-  // Calculate display index for ScrambleDisplay (mapping flat index back to original R2 etc)
   const displayScrambleIndex = useMemo(() => {
     let flatCount = 0;
     for (let i = 0; i < scramble.length; i++) {
       const move = scramble[i];
       const len = move.endsWith('2') ? 2 : 1;
-      if (scrambleIndex < flatCount + len) {
-        return i;
-      }
+      if (scrambleIndex < flatCount + len) return i;
       flatCount += len;
     }
     return scramble.length;
   }, [scramble, scrambleIndex]);
 
-  // Ref to track move count when inspection starts
   const movesAtInspectionStart = useRef(0);
-
-  // Capture move count when inspection starts (scramble complete)
   useEffect(() => {
     if (inspectionState === 'running' && movesAtInspectionStart.current === 0) {
       movesAtInspectionStart.current = activeState.moveCount;
     }
-    if (inspectionState === 'idle') {
-      movesAtInspectionStart.current = 0;
-    }
+    if (inspectionState === 'idle') movesAtInspectionStart.current = 0;
   }, [inspectionState, activeState.moveCount]);
 
-  // Real Timer Start Logic
   useEffect(() => {
     if (timerState !== 'idle' || !scrambleFollowed) return;
-
-    // If we are in inspection mode
     if (inspectionState === 'running' || inspectionState === 'penalty') {
-      // If moves have increased since inspection started
       if (activeState.moveCount > movesAtInspectionStart.current && movesAtInspectionStart.current > 0) {
-        // Stop inspection
         if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
         setInspectionState('idle');
-
-        // Record Start Metadata
         if (activeState.lastMove) {
           solveMetaData.current = {
             index: Math.max(0, activeState.moveHistory.length - 1),
             time: activeState.lastMove.timestamp
           };
-
-          // START TIMER
           startTimer();
         }
       }
     }
-  }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer, solveMetaData]);
+  }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer]);
 
-  // Solution Analysis (Stop Timer)
   useEffect(() => {
     if (timerState === 'running' && isCubeSolved(activeState.facelets)) {
       stopTimer();
-      // Analyze solve
-      // We need to be careful. The solve history starts from `solveMetaData.current.index`.
-      // The `startTime` is `solveMetaData.current.time`.
-
       const history = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
-
-      // We pass the ORIGINAL scramble (before flattening) or flattened?
-      // `analyzeSolve` expects string array. `scramble` is the source.
-      // But we scrambled with `generateScramble`, which might have `R2`.
-      // Analyzer handles `R2`.
-
       const result = analyzeSolve(scramble, history, startTime);
       setAnalysisStats(result);
       setAnalysisOpen(true);
     }
   }, [activeState.facelets, timerState, stopTimer, scramble, activeState.moveHistory]);
-
 
   // Mark scramble as followed when user applies scramble manually
   const handleMarkScrambleFollowed = useCallback(() => {
@@ -380,12 +255,7 @@ const CubeTracker = () => {
     resetTimer();
   }, [resetTimer]);
 
-  // Demo mode handler
-  const handleDemoMode = useCallback(() => {
-    setIsDemoMode(true);
-  }, []);
-
-  // Exit demo mode
+  const handleDemoMode = useCallback(() => setIsDemoMode(true), []);
   const handleExitDemo = useCallback(() => {
     setIsDemoMode(false);
     setScramble([]);
@@ -394,20 +264,17 @@ const CubeTracker = () => {
     resetTimer();
   }, [resetTimer]);
 
-  // Rescue Me Handler
   const handleRescue = useCallback(() => {
     if (isCubeSolved(activeState.facelets)) {
       toast.success("Cube is already solved!");
       return;
     }
-
     const result = getCubeSolution(activeState.facelets);
     if (result.solution) {
-      // Clean up solution string (remove double spaces if any)
       const moves = result.solution.trim().split(/\s+/);
       setScramble(moves);
       setIsRescueMode(true);
-      setIsScrambled(false); // It's not a scramble, it's a solution
+      setIsScrambled(false);
       setScrambleFollowed(false);
       setScrambleIndex(0);
       setWrongMoves([]);
@@ -418,7 +285,23 @@ const CubeTracker = () => {
     }
   }, [activeState.facelets]);
 
-  // Show connect prompt if not connected and not in demo mode
+  // Early return for WebGL support
+  if (!webGLSupported) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-background p-8">
+        <div className="max-w-md text-center space-y-4">
+          <div className="text-4xl">🎲</div>
+          <h2 className="text-xl font-bold">WebGL Required</h2>
+          <p className="text-muted-foreground">
+            Your browser does not support WebGL, which is required for the 3D cube tracker.
+            Please try a modern browser like Chrome or Edge.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Early return for Connection
   if (!isConnected || needsMacAddress) {
     return (
       <ConnectPrompt
@@ -432,188 +315,176 @@ const CubeTracker = () => {
         onConfirmMacAddress={confirmMacAddress}
         onCancelConnection={cancelConnection}
         onClearMacAddress={clearMacAddress}
-        showReflections={showReflections}
-        onToggleReflections={handleToggleReflections}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground pt-20 pb-12 px-4 md:px-8 selection:bg-primary/20">
+    <div className="h-screen w-full relative bg-background text-foreground flex flex-col overflow-hidden selection:bg-primary/20">
       <NavBar />
 
-      <div className="max-w-6xl mx-auto space-y-10">
-        {/* Header - Subtle and Minimal */}
-        <header className="text-center space-y-3 animate-fade-in group">
-          <div className="inline-block p-1 px-3 rounded-full bg-primary/10 border border-primary/20 text-xs font-semibold text-primary uppercase tracking-widest mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-            Professional Speedcubing
+      <main className="flex-1 flex flex-col md:flex-row min-h-0 p-3 md:p-6 gap-6 max-w-[1600px] mx-auto w-full">
+        {/* Left Side: Controls, Timer, Stats */}
+        <div className="flex-[4] flex flex-col gap-4 overflow-y-auto pr-1 pb-10">
+          <header className="flex items-center justify-between gap-4 animate-fade-in">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-foreground/90">GAN Cube Tracker</h1>
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                {isDemoMode ? (
+                  <span className="text-warning flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                    Demo Mode
+                  </span>
+                ) : (
+                  <span className="text-success flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(0,165,80,0.5)]" />
+                    Live Tracking
+                  </span>
+                )}
+              </div>
+            </div>
+          </header>
+
+          <div className="glass-surface rounded-3xl p-6 border border-white/5 shadow-xl flex items-center justify-center animate-fade-in" style={{ animationDelay: '100ms' }}>
+            <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground/90 drop-shadow-sm">
-            GAN Cube Tracker
-          </h1>
-          <div className="flex justify-center items-center gap-2 text-muted-foreground text-sm font-medium">
-            {isDemoMode ? (
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-warning/10 border border-warning/20">
-                <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-                Demo Mode
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 border border-success/20">
-                <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_8px_rgba(0,165,80,0.5)]" />
-                Live Tracking Active
-              </span>
-            )}
+
+          <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
+            <ControlPanel
+              connectionState={isDemoMode ? 'connected' : connectionState}
+              onConnect={connect}
+              onDisconnect={isDemoMode ? handleExitDemo : disconnect}
+              onSync={syncCube}
+              onReset={() => {
+                if (isDemoMode) {
+                  setDemoState({
+                    facelets: createSolvedCube(),
+                    orientation: { x: 0, y: 0, z: 0 },
+                    batteryLevel: 87,
+                    moveCount: 0,
+                    lastMove: null,
+                    moveHistory: [],
+                  });
+                } else {
+                  resetCube();
+                }
+                resetTimer();
+                setScramble([]);
+                setIsScrambled(false);
+                setScrambleFollowed(false);
+                setWrongMoves([]);
+                setInspectionState('idle');
+                setIsRescueMode(false);
+              }}
+              onScramble={handleScramble}
+              onRescue={handleRescue}
+              deviceName={isDemoMode ? 'Demo Cube' : deviceName}
+            />
           </div>
-        </header>
 
-        {/* Timer */}
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
-        </div>
+          <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+            <CubeStats cubeState={activeState} />
+          </div>
 
-        {/* Control Panel */}
-        <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
-          <ControlPanel
-            connectionState={isDemoMode ? 'connected' : connectionState}
-            onConnect={connect}
-            onDisconnect={isDemoMode ? handleExitDemo : disconnect}
-            onSync={syncCube}
-            onReset={() => {
-              if (isDemoMode) {
-                setDemoState({
-                  facelets: createSolvedCube(),
-                  orientation: { x: 0, y: 0, z: 0 },
-                  batteryLevel: 87,
-                  moveCount: 0,
-                  lastMove: null,
-                  moveHistory: [],
-                });
-              } else {
-                resetCube();
-              }
-              resetTimer();
-              setScramble([]);
-              setIsScrambled(false);
-              setScrambleFollowed(false);
-              setWrongMoves([]);
-              setInspectionState('idle');
-              setIsRescueMode(false);
-            }}
-            onScramble={handleScramble}
-            onRescue={handleRescue}
-            deviceName={isDemoMode ? 'Demo Cube' : deviceName}
-          />
-        </div>
-
-        {/* Guided Scramble / Inspection Display */}
-        {scramble.length > 0 && (
-          <div className="animate-scale-in space-y-4 relative">
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setScramble([]);
-                  setIsScrambled(false);
-                  setScrambleFollowed(false);
-                  setWrongMoves([]);
-                  setInspectionState('idle');
-                  setIsRescueMode(false);
-                  resetTimer();
-                }}
-                className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 bg-background/50 px-3 py-1.5 rounded-full border border-border hover:border-destructive/30"
+          {timerState === 'stopped' && !analysisOpen && (
+            <div className="animate-scale-in">
+              <div
+                className="w-full p-4 rounded-2xl bg-success/10 border border-success/30 cursor-pointer hover:bg-success/20 transition-all text-center flex items-center justify-center gap-3 group"
+                onClick={() => setAnalysisOpen(true)}
               >
-                <span>✕</span> Exit Scramble
-              </button>
+                <div className="text-success font-black text-lg group-hover:scale-105 transition-transform">
+                  🎉 {formattedTime}!
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-success/50">Details</div>
+              </div>
             </div>
-            {/* Show Inspection Timer if Active */}
-            {inspectionState === 'running' && (
-              <div className="text-center animate-pulse">
-                <div className={`text-6xl font-bold font-mono ${inspectionTime < 3000 ? 'text-destructive' : inspectionTime < 8000 ? 'text-warning' : 'text-primary'}`}>
-                  {(inspectionTime / 1000).toFixed(1)}
-                </div>
-                <div className="text-sm text-muted-foreground uppercase tracking-wider">Inspection</div>
-              </div>
-            )}
+          )}
+        </div>
 
-            {inspectionState === 'penalty' && (
-              <div className="text-center">
-                <div className="text-4xl font-bold text-destructive">PENALTY</div>
-                <div className="text-sm">Start solve immediately!</div>
-              </div>
-            )}
+        {/* Right Side: 3D Cube & Overlays */}
+        <div className="flex-[6] flex flex-col gap-4 min-h-0">
+          <div className="flex-1 relative group bg-black/5 rounded-[2.5rem] p-1 border border-white/5 overflow-hidden ring-1 ring-white/5">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent z-10" />
 
-            {/* Scramble Display or Unsolved Warning */}
-            {timerState === 'idle' && (
-              (!isCubeSolved(activeState.facelets) && scrambleIndex === 0 && wrongMoves.length === 0 && !isRescueMode) ? (
-                <div className="p-6 rounded-xl bg-destructive/10 border border-destructive/20 text-center animate-pulse">
-                  <div className="text-2xl mb-2">🧩</div>
-                  <h3 className="text-lg font-bold text-destructive mb-1">Cube Not Solved</h3>
-                  <p className="text-sm text-destructive/80">
-                    Please solve the cube to start the scramble sequence.
-                  </p>
+            <Suspense fallback={
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 animate-pulse">Initializing 3D...</div>
                 </div>
-              ) : (
-                <ScrambleDisplay
-                  scramble={scramble}
-                  currentIndex={displayScrambleIndex}
-                  lastMoveCorrect={lastMoveCorrect}
-                  title={isRescueMode ? "Rescue Solution" : "Solution Scramble"}
+              </div>
+            }>
+              <div className="h-full w-full">
+                <RubiksCube3D
+                  facelets={activeState.facelets}
+                  orientation={activeState.orientation}
+                  lastMove={activeState.lastMove}
+                  nextMove={scramble.length > 0 && !scrambleFollowed ? scramble[scrambleIndex] : null}
                 />
-              )
+              </div>
+            </Suspense>
+
+            {scramble.length > 0 && (
+              <div className="absolute top-20 left-6 right-6 pointer-events-none flex flex-col gap-4 animate-fade-in z-20">
+                <div className="pointer-events-auto">
+                  {inspectionState === 'running' && (
+                    <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 border border-white/5 text-center mb-4">
+                      <div className={`text-5xl font-mono font-black ${inspectionTime < 3000 ? 'text-destructive' : inspectionTime < 8000 ? 'text-warning' : 'text-primary'}`}>
+                        {(inspectionTime / 1000).toFixed(1)}
+                      </div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-white/40">Inspection</div>
+                    </div>
+                  )}
+
+                  {inspectionState === 'penalty' && (
+                    <div className="bg-destructive/60 backdrop-blur-sm rounded-2xl p-4 border border-destructive/20 text-center mb-4">
+                      <div className="text-2xl font-black text-white">PENALTY</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-white/70">Start solve immediately!</div>
+                    </div>
+                  )}
+
+                  {timerState === 'idle' && (
+                    <div className="relative group">
+                      {(!isCubeSolved(activeState.facelets) && scrambleIndex === 0 && wrongMoves.length === 0 && !isRescueMode) ? (
+                        <div className="bg-black/20 backdrop-blur-sm rounded-2xl p-4 border border-white/5 text-center">
+                          <h3 className="text-[10px] font-black text-destructive uppercase tracking-[0.2em] mb-1">Cube Not Solved</h3>
+                          <p className="text-[8px] text-destructive/60 font-medium">Solve the cube to start scramble sequence.</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <div className="w-full max-w-2xl px-12 relative">
+                            <ScrambleDisplay
+                              scramble={scramble}
+                              currentIndex={displayScrambleIndex}
+                              lastMoveCorrect={lastMoveCorrect}
+                              title={isRescueMode ? "RESCUE STEPS" : "QUICK SCRAMBLE"}
+                            />
+                            <button
+                              onClick={() => {
+                                setScramble([]);
+                                setIsScrambled(false);
+                                setScrambleFollowed(false);
+                                setWrongMoves([]);
+                                setInspectionState('idle');
+                                setIsRescueMode(false);
+                                resetTimer();
+                              }}
+                              className="absolute top-1/2 -right-2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all z-30"
+                              title="Exit"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        )}
-
-        {/* 3D Cube View - Glass Style Container */}
-        <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
-          <div className="relative group">
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-transparent to-primary/20 rounded-[2rem] blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-            <div className="relative card-gradient rounded-[2rem] p-1 shadow-2xl overflow-hidden glass-surface border border-white/10">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-
-
-
-              <Suspense fallback={
-                <div className="w-full h-[400px] md:h-[600px] flex items-center justify-center bg-black/5">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                    <div className="text-muted-foreground font-medium animate-pulse">Initializing 3D Engine...</div>
-                  </div>
-                </div>
-              }>
-                <div className="w-full h-[450px] md:h-[650px]">
-                  <RubiksCube3D
-                    facelets={activeState.facelets}
-                    orientation={activeState.orientation}
-                    lastMove={activeState.lastMove}
-                    nextMove={flatScramble[scrambleIndex]}
-                    showReflections={showReflections}
-                  />
-                </div>
-              </Suspense>
-            </div>
-          </div>
         </div>
-
-        {/* Stats */}
-        <div className="animate-fade-in" style={{ animationDelay: '400ms' }}>
-          <CubeStats cubeState={activeState} />
-        </div>
-
-        {/* Status indicator */}
-        {timerState === 'stopped' && !analysisOpen && (
-          <div className="text-center animate-scale-in">
-            <div
-              className="inline-block px-6 py-3 rounded-xl bg-success/10 border border-success/30 cursor-pointer hover:bg-success/20 transition-colors"
-              onClick={() => setAnalysisOpen(true)}
-            >
-              <div className="text-success font-bold text-xl">
-                🎉 Solved in {formattedTime}!
-              </div>
-              <div className="text-sm text-success/70">Click for Stats</div>
-            </div>
-          </div>
-        )}
-      </div>
+      </main>
 
       <SolveAnalysisDialog
         open={analysisOpen}

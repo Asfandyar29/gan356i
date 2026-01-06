@@ -13,8 +13,6 @@ interface ConnectPromptProps {
   onConfirmMacAddress: (mac: string) => void;
   onCancelConnection: () => void;
   onClearMacAddress: () => void;
-  showReflections: boolean;
-  onToggleReflections: (value: boolean) => void;
 }
 
 const ConnectPrompt = ({
@@ -28,8 +26,6 @@ const ConnectPrompt = ({
   onConfirmMacAddress,
   onCancelConnection,
   onClearMacAddress,
-  showReflections,
-  onToggleReflections,
 }: ConnectPromptProps) => {
   const [macAddress, setMacAddress] = useState(savedMacAddress || '');
   const [showHelp, setShowHelp] = useState(false);
@@ -225,34 +221,7 @@ const ConnectPrompt = ({
             )}
           </div>
 
-          {/* Performance Settings */}
-          <div className="space-y-4 text-left p-6 rounded-3xl bg-white/5 border border-white/5 mx-1">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Glass Reflections</h3>
-                <p className="text-[9px] text-muted-foreground/30 font-bold uppercase">Advanced 3D Rasterization</p>
-              </div>
-              <button
-                onClick={() => onToggleReflections(!showReflections)}
-                className={`
-                  w-12 h-6 rounded-full transition-all duration-300 relative shrink-0
-                  ${showReflections ? 'bg-primary shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-white/10 border border-white/5'}
-                `}
-              >
-                <div className={`
-                  absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 transform
-                  ${showReflections ? 'translate-x-[24px]' : 'translate-x-[4px]'}
-                `} />
-              </button>
-            </div>
 
-            <div className="p-3.5 rounded-2xl bg-warning/5 border border-warning/10 flex gap-3">
-              <div className="w-1 h-auto bg-warning/30 rounded-full shrink-0" />
-              <p className="text-[9px] text-warning/70 font-bold leading-relaxed uppercase tracking-wider">
-                <span className="text-warning">NOTE:</span> Enable only on GPU-equipped devices. Disable if you experience frame drops or lag during cube rotation.
-              </p>
-            </div>
-          </div>
 
           {/* Buttons */}
           <div className="space-y-4 pt-4">

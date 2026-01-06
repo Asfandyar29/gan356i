@@ -8,7 +8,7 @@ const TimerDisplay = ({ time, isRunning }: TimerDisplayProps) => {
     <div className="flex flex-col items-center gap-3">
       <div
         className={`
-          timer-display text-7xl md:text-9xl font-extrabold tracking-tighter
+          timer-display text-5xl md:text-7xl font-extrabold tracking-tighter
           transition-all duration-500 transform
           ${isRunning
             ? 'text-primary scale-105 drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]'
