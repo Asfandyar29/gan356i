@@ -130,7 +130,7 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
   const basePosition = useRef(position);
   // Store colors - only update when NOT animating to prevent flashing
   const displayColors = useRef(colors);
-  
+
   // Update base position and colors only when not animating
   useEffect(() => {
     if (!animationRotation) {
@@ -304,10 +304,14 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
 
   // Sync with prop facelets when no animations are pending/active
   useEffect(() => {
-    if (!animatingLayer && moveQueue.current.length === 0) {
+    // Check if there's a new move that we haven't started animating yet
+    // This prevents the "color flash" where the cube state updates before the animation starts
+    const isNewMove = lastMove && lastMove.timestamp !== lastProcessedMoveTimestamp.current;
+
+    if (!animatingLayer && moveQueue.current.length === 0 && !isNewMove) {
       setDisplayFacelets(facelets);
     }
-  }, [facelets, animatingLayer]);
+  }, [facelets, animatingLayer, lastMove]);
 
   // Handle new incoming moves from props
   useEffect(() => {
@@ -323,9 +327,10 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
   useFrame((_, delta) => {
     // Process the animation queue
     if (animatingLayer) {
-      // Speed up animation if queue is building up
-      const speedMultiplier = Math.min(1 + moveQueue.current.length * 0.5, 4);
-      animationProgress.current += delta * 8 * speedMultiplier;
+      // Speed up animation if queue is building up, but keep it slower by default
+      const baseSpeed = 3.5; // Reduced from 8 for smoothness
+      const speedMultiplier = Math.min(1 + moveQueue.current.length * 0.5, 3);
+      animationProgress.current += delta * baseSpeed * speedMultiplier;
 
       if (animationProgress.current >= 1) {
         // Finish current animation - apply the move to facelets
@@ -438,8 +443,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = 1 - position[1]; // y=1 -> 0, y=0 -> 1, y=-1 -> 2
             const col = 1 - position[2]; // z=1 -> 0, z=0 -> 1, z=-1 -> 2
             const idx = 9 + row * 3 + col;
-            colors[0] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at R face idx ${idx} (row ${row}, col ${col})`);
+            colors[0] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at R face idx ${idx} (row ${row}, col ${col})`);
           }
 
           // Left face (x = -1 in position) - Orange
@@ -451,8 +456,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = 1 - position[1]; // y=1 -> 0, y=0 -> 1, y=-1 -> 2
             const col = position[2] + 1; // z=-1 -> 0, z=0 -> 1, z=1 -> 2
             const idx = 36 + row * 3 + col;
-            colors[1] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at L face idx ${idx} (row ${row}, col ${col})`);
+            colors[1] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at L face idx ${idx} (row ${row}, col ${col})`);
           }
 
           // Up face (y = 1 in position) - White
@@ -464,8 +469,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = position[2] + 1; // z=-1 -> 0, z=0 -> 1, z=1 -> 2 (Back to Front)
             const col = position[0] + 1; // x=-1 -> 0, x=0 -> 1, x=1 -> 2 (Left to Right)
             const idx = 0 + row * 3 + col;
-            colors[2] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at U face idx ${idx} (row ${row}, col ${col})`);
+            colors[2] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at U face idx ${idx} (row ${row}, col ${col})`);
           }
 
           // Down face (y = -1 in position) - Yellow
@@ -477,8 +482,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = 1 - position[2]; // z=1 -> 0, z=0 -> 1, z=-1 -> 2 (Front to Back)
             const col = position[0] + 1; // x=-1 -> 0, x=0 -> 1, x=1 -> 2 (Left to Right)
             const idx = 27 + row * 3 + col;
-            colors[3] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at D face idx ${idx} (row ${row}, col ${col})`);
+            colors[3] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at D face idx ${idx} (row ${row}, col ${col})`);
           }
 
           // Front face (z = 1 in position) - Green
@@ -490,8 +495,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = 1 - position[1]; // y=1 -> 0, y=0 -> 1, y=-1 -> 2 (Top to Bottom)
             const col = position[0] + 1; // x=-1 -> 0, x=0 -> 1, x=1 -> 2 (Left to Right)
             const idx = 18 + row * 3 + col;
-            colors[4] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at F face idx ${idx} (row ${row}, col ${col})`);
+            colors[4] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at F face idx ${idx} (row ${row}, col ${col})`);
           }
 
           // Back face (z = -1 in position) - Blue
@@ -503,8 +508,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
             const row = 1 - position[1]; // y=1 -> 0, y=0 -> 1, y=-1 -> 2 (Top to Bottom)
             const col = 1 - position[0]; // x=1 -> 0, x=0 -> 1, x=-1 -> 2 (Right to Left)
             const idx = 45 + row * 3 + col;
-            colors[5] = facelets[idx] || null;
-            if (!facelets[idx]) console.warn(`Missing facelet at B face idx ${idx} (row ${row}, col ${col})`);
+            colors[5] = displayFacelets[idx] || null;
+            if (!displayFacelets[idx]) console.warn(`Missing facelet at B face idx ${idx} (row ${row}, col ${col})`);
           }
 
           result.push({ position, colors, isCenter, persistentRotation });
