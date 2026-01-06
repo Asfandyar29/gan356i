@@ -126,6 +126,19 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
   const stickerThickness = 0.015;
   const stickerRadius = 0.1;
 
+  // Store the initial position for this render cycle
+  const basePosition = useRef(position);
+  // Store colors - only update when NOT animating to prevent flashing
+  const displayColors = useRef(colors);
+  
+  // Update base position and colors only when not animating
+  useEffect(() => {
+    if (!animationRotation) {
+      basePosition.current = position;
+      displayColors.current = colors;
+    }
+  }, [position, colors, animationRotation]);
+
   // Apply animation and persistent rotation
   useFrame(() => {
     if (groupRef.current) {
@@ -157,7 +170,8 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
         q.premultiply(activeQ);
       }
 
-      const pos = new THREE.Vector3(...position);
+      // Use the stored base position for animation calculations
+      const pos = new THREE.Vector3(...basePosition.current);
       // Pieces being animated move along their layer arc in world space
       if (animationRotation) {
         pos.applyQuaternion(activeQ);
@@ -187,13 +201,16 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
     [0, Math.PI, 0],      // Back
   ];
 
+  // Use the stored colors to prevent flashing during animation
+  const colorsToRender = animationRotation ? displayColors.current : colors;
+
   return (
     <group ref={groupRef} position={position}>
       <RoundedBox args={[size, size, size]} radius={0.08} smoothness={4}>
         <meshStandardMaterial color="#1a1a1a" />
       </RoundedBox>
 
-      {colors.map((color, index) => {
+      {colorsToRender.map((color, index) => {
         if (!color) return null;
 
         const displayColor = colorMap[color];
@@ -282,7 +299,8 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
   const moveQueue = useRef<AnimatingLayer[]>([]);
   const animationProgress = useRef(0);
   const lastProcessedMoveTimestamp = useRef<number | null>(null);
-  const pendingFacelets = useRef<Facelets | null>(null);
+  // Store a counter to force re-render when animation completes
+  const [animationTick, setAnimationTick] = useState(0);
 
   // Sync with prop facelets when no animations are pending/active
   useEffect(() => {
@@ -307,23 +325,18 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
     if (animatingLayer) {
       // Speed up animation if queue is building up
       const speedMultiplier = Math.min(1 + moveQueue.current.length * 0.5, 4);
-      animationProgress.current += delta * 10 * speedMultiplier;
+      animationProgress.current += delta * 8 * speedMultiplier;
 
       if (animationProgress.current >= 1) {
-        // Finish current animation - NOW apply the new facelets
-        if (pendingFacelets.current) {
-          setDisplayFacelets(pendingFacelets.current);
-          pendingFacelets.current = null;
-        }
+        // Finish current animation - apply the move to facelets
+        setDisplayFacelets(prev => applyMove(prev, animatingLayer.face as any, animatingLayer.direction));
         setAnimatingLayer(null);
         animationProgress.current = 0;
+        setAnimationTick(t => t + 1); // Force re-render
       }
     } else if (moveQueue.current.length > 0) {
       // Start next move in queue
       const nextMoveData = moveQueue.current.shift()!;
-
-      // Calculate the NEW facelets state but don't display yet - store for after animation
-      pendingFacelets.current = applyMove(displayFacelets, nextMoveData.face as any, nextMoveData.direction);
 
       // Update center rotations for visual persistence
       const sign = FACE_ROTATION_SIGNS[nextMoveData.face] || 1;
@@ -500,7 +513,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
     }
 
     return result;
-  }, [displayFacelets, centerRotations]);
+  }, [displayFacelets, centerRotations, animationTick]);
 
   // Calculate animation rotation for each cubelet
   const getAnimationRotation = (position: [number, number, number]) => {
@@ -539,16 +552,20 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
 
   return (
     <group ref={groupRef}>
-      {cubelets.map((cubelet, index) => (
-        <Cubelet
-          key={index}
-          position={cubelet.position}
-          colors={cubelet.colors}
-          isCenter={cubelet.isCenter}
-          animationRotation={getAnimationRotation(cubelet.position)}
-          persistentRotation={cubelet.persistentRotation}
-        />
-      ))}
+      {cubelets.map((cubelet) => {
+        // Create stable key based on position
+        const posKey = `${cubelet.position[0]}_${cubelet.position[1]}_${cubelet.position[2]}`;
+        return (
+          <Cubelet
+            key={posKey}
+            position={cubelet.position}
+            colors={cubelet.colors}
+            isCenter={cubelet.isCenter}
+            animationRotation={getAnimationRotation(cubelet.position)}
+            persistentRotation={cubelet.persistentRotation}
+          />
+        );
+      })}
       {nextMove && <ScrambleArrow move={nextMove} />}
     </group>
   );
