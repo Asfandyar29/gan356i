@@ -262,31 +262,40 @@ const CubeTracker = () => {
       setScrambleIndex(nextIndex);
 
       if (nextIndex >= flatScramble.length) {
-        // Scramble Complete!
+        // Scramble or Solution Complete!
         setScrambleFollowed(true);
-        toast.success("Scramble Complete! Inspection starting...");
 
-        // Start Inspection Timer
-        setInspectionState('running');
-        setInspectionTime(15000);
+        if (isRescueMode) {
+          toast.success("Cube Solved!");
+          // Reset everything for idle state
+          setScramble([]);
+          setScrambleFollowed(false);
+          setIsRescueMode(false);
+        } else {
+          toast.success("Scramble Complete! Inspection starting...");
 
-        inspectionIntervalRef.current = window.setInterval(() => {
-          setInspectionTime(t => {
-            if (t <= 0) {
-              setInspectionState('penalty');
-              if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
-              return 0;
-            }
-            return t - 100;
-          });
-        }, 100);
+          // Start Inspection Timer
+          setInspectionState('running');
+          setInspectionTime(15000);
+
+          inspectionIntervalRef.current = window.setInterval(() => {
+            setInspectionTime(t => {
+              if (t <= 0) {
+                setInspectionState('penalty');
+                if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
+                return 0;
+              }
+              return t - 100;
+            });
+          }, 100);
+        }
       }
     } else {
       // User made a mistake
       setLastMoveCorrect(false);
       setWrongMoves([move]);
     }
-  }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves]);
+  }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves, isRescueMode]);
 
   // Calculate display index for ScrambleDisplay (mapping flat index back to original R2 etc)
   const displayScrambleIndex = useMemo(() => {
