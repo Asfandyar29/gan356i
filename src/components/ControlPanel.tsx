@@ -9,7 +9,6 @@ interface ControlPanelProps {
   onSync: () => void | Promise<void>;
   onReset: () => void;
   onScramble: () => void;
-  onRescue: () => void;
   deviceName: string | null;
 }
 
@@ -20,7 +19,6 @@ const ControlPanel = ({
   onSync,
   onReset,
   onScramble,
-  onRescue,
   deviceName,
 }: ControlPanelProps) => {
   const isConnected = connectionState === 'connected';
@@ -72,10 +70,6 @@ const ControlPanel = ({
             <Button variant="default" className="h-10 rounded-xl px-6 font-bold shadow-lg" onClick={onScramble}>
               <Shuffle className="w-4 h-4 mr-2" />
               Scramble
-            </Button>
-
-            <Button variant="outline" className="h-10 rounded-xl px-5 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary transition-colors font-bold" onClick={onRescue}>
-              <span className="mr-2 text-lg">🚑</span> Rescue
             </Button>
 
             <Button variant="ghost" className="h-10 rounded-xl px-4 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onDisconnect()}>

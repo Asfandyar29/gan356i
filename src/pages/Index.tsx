@@ -12,7 +12,6 @@ import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
 import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
 import { toast } from 'sonner';
 import NavBar from '@/components/NavBar';
-import { getCubeSolution } from '@/lib/solver-service';
 
 const CubeTracker = () => {
   const {
@@ -57,9 +56,7 @@ const CubeTracker = () => {
 
   const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
-
   const solveMetaData = useRef({ index: 0, time: 0 });
-  const [isRescueMode, setIsRescueMode] = useState(false);
 
   // Performance Settings
   const [showReflections, setShowReflections] = useState(() => {
@@ -98,8 +95,6 @@ const CubeTracker = () => {
     setLastMoveCorrect(null);
     setInspectionState('idle');
     setInspectionTime(15000);
-    setInspectionTime(15000);
-    setWrongMoves([]); // Reset wrong moves stack
     resetTimer();
 
     // Reset inspection timer
@@ -213,86 +208,47 @@ const CubeTracker = () => {
     setFlatScramble(flat);
   }, [scramble]);
 
-  // Stack of wrong moves to enforce undoing errors
-  const [wrongMoves, setWrongMoves] = useState<string[]>([]);
-  const lastProcessedMoveCount = useRef(0);
-
-  // Helper to invert a move string
-  const invertMove = (move: string) => {
-    if (move.endsWith("'")) return move.slice(0, -1);
-    return move + "'";
-  };
-
   // Guided Scramble Check
   useEffect(() => {
     if (!activeState.lastMove || flatScramble.length === 0 || scrambleFollowed) return;
     if (activeState.moveCount === 0) return; // Ignore initial state
 
-    // Check if we already processed this move
-    if (activeState.moveCount === lastProcessedMoveCount.current) return;
-    lastProcessedMoveCount.current = activeState.moveCount;
-
-    const move = activeState.lastMove.notation;
     const target = flatScramble[scrambleIndex];
+    const move = activeState.lastMove.notation;
 
-    // If we have wrong moves stacked up
-    if (wrongMoves.length > 0) {
-      const lastWrong = wrongMoves[wrongMoves.length - 1];
-      if (move === invertMove(lastWrong)) {
-        // User undid the last wrong move
-        setWrongMoves(prev => {
-          const newStack = prev.slice(0, -1);
-          // If stack becomes empty, we are back to neutral (waiting for target)
-          // But effectively we just recovered, so let's set lastMoveCorrect to null or true?
-          // If we set it to null, the UI might lose the "Wrong" status.
-          if (newStack.length === 0) setLastMoveCorrect(null);
-          return newStack;
-        });
-      } else {
-        // User made another wrong move
-        setWrongMoves(prev => [...prev, move]);
-      }
-      return;
-    }
+    // Check for match
+    // Note: Cube 'R' matches Scramble 'R'.
+    // Cube "R'" matches Scramble "R'".
 
-    // Normal check (no wrong moves pending)
     if (move === target) {
       setLastMoveCorrect(true);
       const nextIndex = scrambleIndex + 1;
       setScrambleIndex(nextIndex);
 
       if (nextIndex >= flatScramble.length) {
-        // Scramble/Solution Complete!
+        // Scramble Complete!
         setScrambleFollowed(true);
+        toast.success("Scramble Complete! Inspection starting...");
 
-        if (isRescueMode) {
-          toast.success("Cube Solved!");
-          setInspectionState('idle');
-        } else {
-          toast.success("Scramble Complete! Inspection starting...");
+        // Start Inspection Timer
+        setInspectionState('running');
+        setInspectionTime(15000);
 
-          // Start Inspection Timer
-          setInspectionState('running');
-          setInspectionTime(15000);
-
-          inspectionIntervalRef.current = window.setInterval(() => {
-            setInspectionTime(t => {
-              if (t <= 0) {
-                setInspectionState('penalty');
-                if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
-                return 0;
-              }
-              return t - 100;
-            });
-          }, 100);
-        }
+        inspectionIntervalRef.current = window.setInterval(() => {
+          setInspectionTime(t => {
+            if (t <= 0) {
+              setInspectionState('penalty');
+              if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
+              return 0;
+            }
+            return t - 100;
+          });
+        }, 100);
       }
     } else {
-      // User made a mistake
       setLastMoveCorrect(false);
-      setWrongMoves([move]);
     }
-  }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves]);
+  }, [activeState.moveCount]); // Trigger on move count change to avoid duplicate checks
 
   // Calculate display index for ScrambleDisplay (mapping flat index back to original R2 etc)
   const displayScrambleIndex = useMemo(() => {
@@ -387,33 +343,8 @@ const CubeTracker = () => {
     setIsDemoMode(false);
     setScramble([]);
     setScrambleFollowed(false);
-    setIsRescueMode(false);
     resetTimer();
   }, [resetTimer]);
-
-  // Rescue Me Handler
-  const handleRescue = useCallback(() => {
-    if (isCubeSolved(activeState.facelets)) {
-      toast.success("Cube is already solved!");
-      return;
-    }
-
-    const result = getCubeSolution(activeState.facelets);
-    if (result.solution) {
-      // Clean up solution string (remove double spaces if any)
-      const moves = result.solution.trim().split(/\s+/);
-      setScramble(moves);
-      setIsRescueMode(true);
-      setIsScrambled(false); // It's not a scramble, it's a solution
-      setScrambleFollowed(false);
-      setScrambleIndex(0);
-      setWrongMoves([]);
-      setInspectionState('idle');
-      toast.success(`Solution found: ${moves.length} moves`);
-    } else {
-      toast.error(`Solution failed: ${result.error || "Unknown error"}`);
-    }
-  }, [activeState.facelets]);
 
   // Show connect prompt if not connected and not in demo mode
   if (!isConnected || needsMacAddress) {
@@ -492,35 +423,15 @@ const CubeTracker = () => {
               setScramble([]);
               setIsScrambled(false);
               setScrambleFollowed(false);
-              setWrongMoves([]);
-              setInspectionState('idle');
-              setIsRescueMode(false);
             }}
             onScramble={handleScramble}
-            onRescue={handleRescue}
             deviceName={isDemoMode ? 'Demo Cube' : deviceName}
           />
         </div>
 
         {/* Guided Scramble / Inspection Display */}
         {scramble.length > 0 && (
-          <div className="animate-scale-in space-y-4 relative">
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setScramble([]);
-                  setIsScrambled(false);
-                  setScrambleFollowed(false);
-                  setWrongMoves([]);
-                  setInspectionState('idle');
-                  setIsRescueMode(false);
-                  resetTimer();
-                }}
-                className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 bg-background/50 px-3 py-1.5 rounded-full border border-border hover:border-destructive/30"
-              >
-                <span>✕</span> Exit Scramble
-              </button>
-            </div>
+          <div className="animate-scale-in space-y-4">
             {/* Show Inspection Timer if Active */}
             {inspectionState === 'running' && (
               <div className="text-center animate-pulse">
@@ -538,24 +449,13 @@ const CubeTracker = () => {
               </div>
             )}
 
-            {/* Scramble Display or Unsolved Warning */}
+            {/* Scramble Display (Hidden during solve usually? No keep it) */}
             {timerState === 'idle' && (
-              (!isCubeSolved(activeState.facelets) && scrambleIndex === 0 && wrongMoves.length === 0 && !isRescueMode) ? (
-                <div className="p-6 rounded-xl bg-destructive/10 border border-destructive/20 text-center animate-pulse">
-                  <div className="text-2xl mb-2">🧩</div>
-                  <h3 className="text-lg font-bold text-destructive mb-1">Cube Not Solved</h3>
-                  <p className="text-sm text-destructive/80">
-                    Please solve the cube to start the scramble sequence.
-                  </p>
-                </div>
-              ) : (
-                <ScrambleDisplay
-                  scramble={scramble}
-                  currentIndex={displayScrambleIndex}
-                  lastMoveCorrect={lastMoveCorrect}
-                  title={isRescueMode ? "Rescue Solution" : "Solution Scramble"}
-                />
-              )
+              <ScrambleDisplay
+                scramble={scramble}
+                currentIndex={displayScrambleIndex}
+                lastMoveCorrect={lastMoveCorrect}
+              />
             )}
           </div>
         )}
@@ -566,9 +466,6 @@ const CubeTracker = () => {
             <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-transparent to-primary/20 rounded-[2rem] blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
             <div className="relative card-gradient rounded-[2rem] p-1 shadow-2xl overflow-hidden glass-surface border border-white/10">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
-
-
-
               <Suspense fallback={
                 <div className="w-full h-[400px] md:h-[600px] flex items-center justify-center bg-black/5">
                   <div className="flex flex-col items-center gap-4">
