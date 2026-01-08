@@ -14,7 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      solve_history: {
+        Row: {
+          id: string
+          is_dnf: boolean | null
+          is_plus_two: boolean | null
+          move_count: number | null
+          moves: string | null
+          notes: string | null
+          scramble: string
+          solve_time_ms: number
+          solved_at: string
+          tps: number | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          is_dnf?: boolean | null
+          is_plus_two?: boolean | null
+          move_count?: number | null
+          moves?: string | null
+          notes?: string | null
+          scramble: string
+          solve_time_ms: number
+          solved_at?: string
+          tps?: number | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          is_dnf?: boolean | null
+          is_plus_two?: boolean | null
+          move_count?: number | null
+          moves?: string | null
+          notes?: string | null
+          scramble?: string
+          solve_time_ms?: number
+          solved_at?: string
+          tps?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solve_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      solve_logs: {
+        Row: {
+          created_at: string
+          id: string
+          move_sequence: Json
+          solve_id: string
+          timestamps: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          move_sequence: Json
+          solve_id: string
+          timestamps?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          move_sequence?: Json
+          solve_id?: string
+          timestamps?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solve_logs_solve_id_fkey"
+            columns: ["solve_id"]
+            isOneToOne: false
+            referencedRelation: "solve_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_stats: {
+        Row: {
+          average_time_ms: number | null
+          best_ao100_ms: number | null
+          best_ao12_ms: number | null
+          best_ao5_ms: number | null
+          best_time_ms: number | null
+          id: string
+          total_solves: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_time_ms?: number | null
+          best_ao100_ms?: number | null
+          best_ao12_ms?: number | null
+          best_ao5_ms?: number | null
+          best_time_ms?: number | null
+          id?: string
+          total_solves?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_time_ms?: number | null
+          best_ao100_ms?: number | null
+          best_ao12_ms?: number | null
+          best_ao5_ms?: number | null
+          best_time_ms?: number | null
+          id?: string
+          total_solves?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_stats_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
