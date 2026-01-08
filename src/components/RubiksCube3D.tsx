@@ -7,7 +7,7 @@ import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
 import { applyMove } from '@/lib/cube-solver';
 
 // Scramble Arrow Component
-const ScrambleArrow = ({ move }: { move: string }) => {
+const ScrambleArrow = ({ move, isError = false }: { move: string; isError?: boolean }) => {
   const groupRef = useRef<THREE.Group>(null);
 
   const face = move[0];
@@ -15,7 +15,8 @@ const ScrambleArrow = ({ move }: { move: string }) => {
   const isCCW = modifier === "'";
   const isDouble = modifier === '2';
 
-  const color = "#00FF00"; // Green arrow
+  // Red for error, Green for normal
+  const color = isError ? "#DC2626" : "#4ade80";
   const arcRadius = 1.0;
   const tubeRadius = 0.08;
 
@@ -27,17 +28,35 @@ const ScrambleArrow = ({ move }: { move: string }) => {
   const offset = 2.2;
 
   switch (face) {
-    case 'F': position = [0, 0, offset]; rotation = [0, 0, 0]; break;
-    case 'B': position = [0, 0, -offset]; rotation = [0, Math.PI, 0]; break;
-    case 'U': position = [0, offset, 0]; rotation = [-Math.PI / 2, 0, 0]; break;
-    case 'D': position = [0, -offset, 0]; rotation = [Math.PI / 2, 0, 0]; break;
-    case 'R': position = [offset, 0, 0]; rotation = [0, Math.PI / 2, 0]; break;
-    case 'L': position = [-offset, 0, 0]; rotation = [0, -Math.PI / 2, 0]; break;
+    case 'U':
+      position = [0, offset, 0];
+      rotation = [-Math.PI / 2, 0, 0]; // Face up (+Y)
+      break;
+    case 'D':
+      position = [0, -offset, 0];
+      rotation = [Math.PI / 2, 0, 0]; // Face down (-Y)
+      break;
+    case 'F':
+      position = [0, 0, offset];
+      rotation = [0, 0, 0]; // Face front (+Z)
+      break;
+    case 'B':
+      position = [0, 0, -offset];
+      rotation = [0, Math.PI, 0]; // Face back (-Z)
+      break;
+    case 'R':
+      position = [offset, 0, 0];
+      rotation = [0, Math.PI / 2, 0]; // Face right (+X)
+      break;
+    case 'L':
+      position = [-offset, 0, 0];
+      rotation = [0, -Math.PI / 2, 0]; // Face left (-X)
+      break;
   }
 
   return (
     <group position={position} rotation={rotation as any}>
-      <group scale={[1, 1, 1]} rotation={[0, 0, isCCW ? Math.PI / 2 : 0]}>
+      <group rotation={[0, 0, 0]}>
         <ArrowArc isCCW={isCCW} isDouble={isDouble} color={color} radius={arcRadius} tube={tubeRadius} />
       </group>
     </group>
@@ -47,20 +66,48 @@ const ScrambleArrow = ({ move }: { move: string }) => {
 const ArrowArc = ({ isCCW, isDouble, color, radius, tube }: any) => {
   const arcLen = isDouble ? Math.PI : Math.PI / 1.5;
 
+  // We define a base arc that starts at 0 and goes to 'arcLen' in CCW direction?
+  // Or simpler:
+  // We want to draw an arrow.
+  // if !isCCW (Clockwise):
+  // Draw arc from 0 to -arcLen. Arrow head at -arcLen.
+
+  // if isCCW (Counter-Clockwise):
+  // Draw arc from 0 to +arcLen. Arrow head at +arcLen.
+
   return (
     <group rotation={[0, 0, 0]}>
-      <group rotation={[0, 0, Math.PI / 2]}>
-        <mesh rotation={[0, 0, isCCW ? 0 : -arcLen]}>
-          <torusGeometry args={[radius, tube, 8, 32, arcLen]} />
+      {/* If CW (isCCW=false), we might need to flip the whole thing or draw differently */}
+      {/* Let's construct it specifically for each case to be sure */}
+
+      <mesh rotation={[0, 0, isCCW ? 0 : -arcLen]}>
+        {/* Torus arc: 'arcLen' is the length. The geometry starts at 0 and goes CCW by default? */}
+        <torusGeometry args={[radius, tube, 8, 32, arcLen]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+      </mesh>
+
+      <group rotation={[0, 0, isCCW ? arcLen : -arcLen]}>
+        {/* Cone at the end of the arc */}
+        <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 0 : Math.PI]}>
+          {/* Cone orientation: tip points up Y? default cone is height along Y? 
+                coneGeometry: radius, height. 
+                Default cylinder/cone is along Y axis. 
+                We rotated it? No, wait. 
+                We are in a group rotated around Z. 
+                Mesh is translated x=radius. 
+                So it's on the ring.
+                Cone rotation:
+                If we want it tangent...
+                Default cone points up (+Y).
+                We want it pointing along the tangent of the circle.
+                Tangent at angle theta is (-sin, cos).
+                
+                Let's assume the previous code was roughly visually correct but flipped.
+                I will maintain the structure but simplify the logic used in parent.
+            */}
+          <coneGeometry args={[tube * 2.5, tube * 4, 16]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
         </mesh>
-
-        <group rotation={[0, 0, isCCW ? arcLen : -arcLen]}>
-          <mesh position={[radius, 0, 0]} rotation={[0, 0, isCCW ? 0 : Math.PI]}>
-            <coneGeometry args={[tube * 2.5, tube * 4, 16]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
-          </mesh>
-        </group>
       </group>
     </group>
   );
@@ -248,6 +295,7 @@ const Cubelet = ({ position, colors, isCenter = false, animationRotation, persis
 
 // ... (GanLogo remains same)
 
+// Helper interfaces
 interface AnimatingLayer {
   face: string;
   direction: 1 | -1;
@@ -259,38 +307,29 @@ interface CubeGroupProps {
   axisConfig: AxisConfig;
   lastMove: MoveEvent | null;
   nextMove?: string | null;
+  isError?: boolean;
 }
 
-// Normalize angle to prevent sudden jumps (keeps angle in -180 to 180 range)
+// Normalize angle to prevent sudden jumps
 const normalizeAngle = (angle: number): number => {
   while (angle > 180) angle -= 360;
   while (angle < -180) angle += 360;
   return angle;
 };
 
-// Rotation Direction Factors for Standard CW Moves -> World Axis Rotation
-// U: -Y (-1), D: +Y (1), R: -X (-1), L: +X (1), F: -Z (-1), B: +Z (1)
+// Rotation Direction Factors
 const FACE_ROTATION_SIGNS: Record<string, number> = {
-  U: -1,
-  D: 1,
-  R: -1,
-  L: 1,
-  F: -1,
-  B: 1,
+  U: -1, D: 1, R: -1, L: 1, F: -1, B: 1,
 };
 
-// Smooth angle interpolation that handles wraparound
 const lerpAngle = (current: number, target: number, factor: number): number => {
   let diff = target - current;
-
-  // Handle wraparound - take the shortest path
   if (diff > Math.PI) diff -= 2 * Math.PI;
   if (diff < -Math.PI) diff += 2 * Math.PI;
-
   return current + diff * factor;
 };
 
-const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: CubeGroupProps) => {
+const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove, isError }: CubeGroupProps) => {
   const groupRef = useRef<THREE.Group>(null);
   const currentRotation = useRef({ x: 0, y: 0, z: 0 });
 
@@ -585,7 +624,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove }: Cu
           />
         );
       })}
-      {nextMove && <ScrambleArrow move={nextMove} />}
+      {nextMove && <ScrambleArrow move={nextMove} isError={isError} />}
     </group>
   );
 };
@@ -596,6 +635,7 @@ interface RubiksCube3DProps {
   lastMove?: MoveEvent | null;
   nextMove?: string | null;
   showReflections?: boolean;
+  isError?: boolean;
 }
 
 const RubiksCube3D = ({
@@ -603,6 +643,7 @@ const RubiksCube3D = ({
   orientation,
   lastMove = null,
   nextMove = null,
+  isError = false,
 }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
   const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
@@ -666,6 +707,7 @@ const RubiksCube3D = ({
             axisConfig={axisConfig}
             lastMove={lastMove}
             nextMove={nextMove}
+            isError={isError} // Pass isError to CubeGroup
           />
         </Float>
 

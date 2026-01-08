@@ -162,7 +162,7 @@ const AxisCalibration = ({ onConfigChange, currentOrientation }: AxisCalibration
   }
 
   return (
-    <div className="absolute top-2 right-2 z-10 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-4 shadow-xl min-w-[280px]">
+    <div className="absolute top-2 right-2 z-10 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-4 shadow-xl min-w-[280px] max-h-[80vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Settings className="w-4 h-4 text-primary" />

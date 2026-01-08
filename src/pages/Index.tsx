@@ -153,33 +153,46 @@ const CubeTracker = () => {
     const move = activeState.lastMove.notation;
     const target = flatScramble[scrambleIndex];
 
+    // Smart Rescue Logic: Recalculate on ANY wrong move
+    // Unified Move Validation Logic (Rescue & Scramble)
+
+    // 1. Handle Correction (Undo) if user made a wrong move previously
     if (wrongMoves.length > 0) {
       const lastWrong = wrongMoves[wrongMoves.length - 1];
+      // Check if user performed the inverse (correction) of the last wrong move
       if (move === invertMove(lastWrong)) {
         setWrongMoves(prev => {
           const newStack = prev.slice(0, -1);
-          if (newStack.length === 0) setLastMoveCorrect(null);
+          // If we cleared all wrong moves, set state to neutral/correct so green arrow returns
+          if (newStack.length === 0) setLastMoveCorrect(true);
           return newStack;
         });
       } else {
+        // User made ANOTHER wrong move on top of previous ones
         setWrongMoves(prev => [...prev, move]);
       }
       return;
     }
 
+    // 2. Normal Move Validation (No existing errors)
     if (move === target) {
+      // Correct Move
       setLastMoveCorrect(true);
       const nextIndex = scrambleIndex + 1;
       setScrambleIndex(nextIndex);
 
+      // Check for Completion
       if (nextIndex >= flatScramble.length) {
         setScrambleFollowed(true);
         if (isRescueMode) {
-          toast.success("Cube Solved!");
-          setScramble([]);
-          setScrambleFollowed(false);
-          setIsRescueMode(false);
+          // Rescue Complete logic handled by global solved check or standard flow
+          if (isCubeSolved(activeState.facelets)) {
+            toast.success("Rescue Complete!");
+            setIsRescueMode(false);
+            setScramble([]);
+          }
         } else {
+          // Normal Scramble Completion -> Start Inspection
           toast.success("Scramble Complete! Inspection starting...");
           setInspectionState('running');
           setInspectionTime(15000);
@@ -196,21 +209,71 @@ const CubeTracker = () => {
         }
       }
     } else {
+      // Wrong Move (First error)
       setLastMoveCorrect(false);
       setWrongMoves([move]);
     }
-  }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves, isRescueMode]);
+  }, [activeState.moveCount, flatScramble, scrambleIndex, scrambleFollowed, wrongMoves, isRescueMode, activeState.facelets]);
+
+
+  // Robust 'Solved' Check:
+  // Whenever the facelets change, check if the cube is solved.
+  // If we are in Rescue Mode and the cube becomes solved, exit immediately.
+  useEffect(() => {
+    if (isRescueMode && isCubeSolved(activeState.facelets)) {
+      // Debounce slightly? No, immediate is better for responsiveness.
+      // Confirm it's not just an empty state (though isCubeSolved handles that).
+      toast.success("Cube Solved!");
+      setIsRescueMode(false);
+      setScramble([]);
+      setScrambleFollowed(false);
+      setWrongMoves([]);
+    }
+  }, [activeState.facelets, isRescueMode]);
 
   const displayScrambleIndex = useMemo(() => {
     let flatCount = 0;
     for (let i = 0; i < scramble.length; i++) {
       const move = scramble[i];
       const len = move.endsWith('2') ? 2 : 1;
+      // If the current progress (scrambleIndex) is WITHIN this move's span
       if (scrambleIndex < flatCount + len) return i;
       flatCount += len;
     }
     return scramble.length;
   }, [scramble, scrambleIndex]);
+
+  // Calculate the actual move to show on the 3D cube
+  // If we are halfway through a double move (e.g. U2), we should only show U.
+  const getEffectiveNextMove = useCallback(() => {
+    if (scramble.length === 0 || scrambleFollowed) return null;
+
+    // Safety check
+    if (displayScrambleIndex >= scramble.length) return null;
+
+    const move = scramble[displayScrambleIndex];
+    const isDouble = move.endsWith('2');
+
+    if (!isDouble) return move;
+
+    // Calculate start index of this move in the flat array
+    let flatStart = 0;
+    for (let i = 0; i < displayScrambleIndex; i++) {
+      flatStart += scramble[i].endsWith('2') ? 2 : 1;
+    }
+
+    // Determine how many parts of this double move are left
+    // scrambleIndex is the number of flat moves completed
+    const movesCompletedInCurrent = scrambleIndex - flatStart;
+
+    // If we have completed 1 part of a double move, showing 'U2' is wrong. 
+    // We should show the base move 'U'.
+    if (movesCompletedInCurrent === 1) {
+      return move.charAt(0); // 'U2' -> 'U'
+    }
+
+    return move;
+  }, [scramble, scrambleIndex, displayScrambleIndex, scrambleFollowed]);
 
   const movesAtInspectionStart = useRef(0);
   useEffect(() => {
@@ -271,14 +334,21 @@ const CubeTracker = () => {
     }
     const result = getCubeSolution(activeState.facelets);
     if (result.solution) {
-      const moves = result.solution.trim().split(/\s+/);
+      const moves = result.solution.trim().split(/\s+/).filter(Boolean);
       setScramble(moves);
       setIsRescueMode(true);
       setIsScrambled(false);
       setScrambleFollowed(false);
       setScrambleIndex(0);
       setWrongMoves([]);
+
+      // Explicitly stop inspection
       setInspectionState('idle');
+      if (inspectionIntervalRef.current) {
+        clearInterval(inspectionIntervalRef.current);
+        inspectionIntervalRef.current = null;
+      }
+
       toast.success(`Solution found: ${moves.length} moves`);
     } else {
       toast.error(`Solution failed: ${result.error || "Unknown error"}`);
@@ -419,15 +489,48 @@ const CubeTracker = () => {
                   facelets={activeState.facelets}
                   orientation={activeState.orientation}
                   lastMove={activeState.lastMove}
-                  nextMove={scramble.length > 0 && !scrambleFollowed ? scramble[scrambleIndex] : null}
+                  nextMove={
+                    // Priority Logic for 3D Guide:
+                    // 1. If Wrong Move Exists (Any Mode) -> Show UNDO arrow (RED)
+                    // 2. Else -> Show Next Sequence Move (GREEN)
+                    (() => {
+                      if (wrongMoves.length > 0) {
+                        const lastWrong = wrongMoves[wrongMoves.length - 1];
+                        return invertMove(lastWrong); // e.g., if user did U, show U'
+                      }
+                      return getEffectiveNextMove();
+                    })()
+                  }
+                  isError={wrongMoves.length > 0}
                 />
               </div>
             </Suspense>
 
-            {scramble.length > 0 && (
+            {/* Rescue Mode Large Indicator */}
+            {isRescueMode && !isCubeSolved(activeState.facelets) && (
+              <div className="absolute top-6 left-6 right-6 z-30 flex flex-col items-center animate-fade-in pointer-events-none">
+                <div className="bg-primary/20 backdrop-blur-md border border-primary/30 rounded-2xl px-6 py-4 shadow-xl mb-4 pointer-events-auto flex flex-col items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">
+                    RESCUE MODE
+                  </span>
+                  {getEffectiveNextMove() && (
+                    <div className="flex items-center gap-4">
+                      <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                        {getEffectiveNextMove()}
+                      </span>
+                      <span className="text-xs text-blue-200 font-medium max-w-[120px] leading-tight text-center opacity-80">
+                        Follow the arrow or text
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(scramble.length > 0) && (
               <div className="absolute top-20 left-6 right-6 pointer-events-none flex flex-col gap-4 animate-fade-in z-20">
                 <div className="pointer-events-auto">
-                  {inspectionState === 'running' && (
+                  {inspectionState === 'running' && !isRescueMode && (
                     <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 border border-white/5 text-center mb-4">
                       <div className={`text-5xl font-mono font-black ${inspectionTime < 3000 ? 'text-destructive' : inspectionTime < 8000 ? 'text-warning' : 'text-primary'}`}>
                         {(inspectionTime / 1000).toFixed(1)}
@@ -436,7 +539,7 @@ const CubeTracker = () => {
                     </div>
                   )}
 
-                  {inspectionState === 'penalty' && (
+                  {inspectionState === 'penalty' && !isRescueMode && (
                     <div className="bg-destructive/60 backdrop-blur-sm rounded-2xl p-4 border border-destructive/20 text-center mb-4">
                       <div className="text-2xl font-black text-white">PENALTY</div>
                       <div className="text-[10px] font-black uppercase tracking-widest text-white/70">Start solve immediately!</div>
@@ -452,12 +555,12 @@ const CubeTracker = () => {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <div className="w-full max-w-2xl px-12 relative">
+                          <div className={`w-full max-w-2xl px-12 relative ${isRescueMode ? 'mt-24' : ''}`}>
                             <ScrambleDisplay
                               scramble={scramble}
                               currentIndex={displayScrambleIndex}
                               lastMoveCorrect={lastMoveCorrect}
-                              title={isRescueMode ? "RESCUE STEPS" : "QUICK SCRAMBLE"}
+                              title={isRescueMode ? "RESCUE SEQUENCE" : "QUICK SCRAMBLE"}
                             />
                             <button
                               onClick={() => {
@@ -468,6 +571,7 @@ const CubeTracker = () => {
                                 setInspectionState('idle');
                                 setIsRescueMode(false);
                                 resetTimer();
+                                toast.info("Rescue Mode Cancelled");
                               }}
                               className="absolute top-1/2 -right-2 -translate-y-1/2 h-8 w-8 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all z-30"
                               title="Exit"
