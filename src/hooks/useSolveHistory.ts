@@ -2,6 +2,37 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import { z } from 'zod';
+
+// Validation schema for solve data
+const solveInputSchema = z.object({
+  solveTimeMs: z.number()
+    .int({ message: 'Solve time must be an integer' })
+    .min(0, { message: 'Solve time cannot be negative' })
+    .max(3600000, { message: 'Solve time cannot exceed 1 hour' }),
+  scramble: z.string()
+    .trim()
+    .min(1, { message: 'Scramble is required' })
+    .max(500, { message: 'Scramble is too long' }),
+  moves: z.string()
+    .trim()
+    .max(5000, { message: 'Moves string is too long' })
+    .optional(),
+  moveCount: z.number()
+    .int({ message: 'Move count must be an integer' })
+    .min(0, { message: 'Move count cannot be negative' })
+    .max(1000, { message: 'Move count is unrealistic' })
+    .optional(),
+  tps: z.number()
+    .min(0, { message: 'TPS cannot be negative' })
+    .max(100, { message: 'TPS is unrealistic' })
+    .optional(),
+  isDnf: z.boolean().optional(),
+  isPlusTwo: z.boolean().optional(),
+  moveSequence: z.array(z.unknown()).max(1000).optional(),
+  timestamps: z.array(z.unknown()).max(1000).optional(),
+  notes: z.string().trim().max(1000, { message: 'Notes are too long' }).optional(),
+});
 
 export interface SolveRecord {
   id: string;
@@ -93,45 +124,56 @@ export function useSolveHistory() {
     isPlusTwo?: boolean;
     moveSequence?: unknown[];
     timestamps?: unknown[];
+    notes?: string;
   }) => {
     if (!user) {
       return { error: new Error('Not authenticated') };
     }
 
+    // Validate input data
+    const validationResult = solveInputSchema.safeParse(solve);
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.errors[0]?.message || 'Invalid solve data';
+      toast.error(errorMessage);
+      return { error: new Error(errorMessage) };
+    }
+
+    const validatedData = validationResult.data;
+
     const { data, error } = await supabase
       .from('solve_history')
       .insert({
         user_id: user.id,
-        solve_time_ms: solve.solveTimeMs,
-        scramble: solve.scramble,
-        moves: solve.moves || null,
-        move_count: solve.moveCount || null,
-        tps: solve.tps || null,
-        is_dnf: solve.isDnf || false,
-        is_plus_two: solve.isPlusTwo || false
+        solve_time_ms: validatedData.solveTimeMs,
+        scramble: validatedData.scramble,
+        moves: validatedData.moves || null,
+        move_count: validatedData.moveCount || null,
+        tps: validatedData.tps || null,
+        is_dnf: validatedData.isDnf || false,
+        is_plus_two: validatedData.isPlusTwo || false,
+        notes: validatedData.notes || null
       })
       .select()
       .single();
 
     if (error) {
-      console.error('Error saving solve:', error);
       toast.error('Failed to save solve');
       return { error };
     }
 
     // Save detailed logs if provided
-    if (data && solve.moveSequence) {
+    if (data && validatedData.moveSequence) {
       await supabase
         .from('solve_logs')
         .insert([{
           solve_id: data.id,
-          move_sequence: JSON.parse(JSON.stringify(solve.moveSequence)),
-          timestamps: solve.timestamps ? JSON.parse(JSON.stringify(solve.timestamps)) : null
+          move_sequence: JSON.parse(JSON.stringify(validatedData.moveSequence)),
+          timestamps: validatedData.timestamps ? JSON.parse(JSON.stringify(validatedData.timestamps)) : null
         }]);
     }
 
     // Update stats
-    await updateStats(solve.solveTimeMs);
+    await updateStats(validatedData.solveTimeMs);
     
     // Refresh data
     fetchSolves();
