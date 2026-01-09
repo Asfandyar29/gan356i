@@ -48,8 +48,11 @@ const NavBar = () => {
               <span className="cursor-default hover:text-foreground transition-colors">Stats</span>
               <span className="cursor-default hover:text-foreground transition-colors">Analyzer</span>
               <span className="cursor-default hover:text-foreground transition-colors">Settings</span>
+              <Link to="/about" className="hover:text-foreground transition-colors text-primary font-semibold">
+                About Developer
+              </Link>
             </div>
-            
+
             <div className="h-2 w-2 rounded-full bg-primary animate-pulse" title="Live Connection Ready" />
 
             {loading ? (
