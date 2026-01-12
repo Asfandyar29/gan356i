@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { LogIn, LogOut, User, Loader2 } from 'lucide-react';
+import { LogIn, LogOut, User, Loader2, Menu, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,11 +10,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { toast } from 'sonner';
+import { useState } from 'react';
 
 const NavBar = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading, signOut } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -44,6 +53,42 @@ const NavBar = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Mobile Menu */}
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetTrigger asChild className="md:hidden">
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                <SheetHeader>
+                  <SheetTitle>Navigation</SheetTitle>
+                </SheetHeader>
+                <div className="flex flex-col gap-4 mt-8">
+                  <Link
+                    to="/about"
+                    className="text-lg font-semibold text-primary hover:text-primary/80 transition-colors py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    About Developer
+                  </Link>
+                  <div className="border-t border-border pt-4 space-y-3">
+                    <span className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-default block py-2">
+                      Stats
+                    </span>
+                    <span className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-default block py-2">
+                      Analyzer
+                    </span>
+                    <span className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-default block py-2">
+                      Settings
+                    </span>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
               <span className="cursor-default hover:text-foreground transition-colors">Stats</span>
               <span className="cursor-default hover:text-foreground transition-colors">Analyzer</span>
