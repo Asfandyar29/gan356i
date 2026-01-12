@@ -133,7 +133,7 @@ const colorMap: Record<CubeColor, string> = {
   green: '#00A550',
   blue: '#0046AD',
   red: '#C41E3A',
-  orange: '#FF5F00',
+  orange: '#FF8500',
 };
 
 // Easing function for smoother animations
@@ -632,6 +632,7 @@ const CubeGroup = ({ facelets, orientation, axisConfig, lastMove, nextMove, isEr
 interface RubiksCube3DProps {
   facelets: Facelets;
   orientation: CubeOrientation;
+  axisConfig: AxisConfig;
   lastMove?: MoveEvent | null;
   nextMove?: string | null;
   showReflections?: boolean;
@@ -641,21 +642,17 @@ interface RubiksCube3DProps {
 const RubiksCube3D = ({
   facelets,
   orientation,
+  axisConfig,
   lastMove = null,
   nextMove = null,
   isError = false,
 }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
-  const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
 
   const quality = axisConfig.quality;
 
   useEffect(() => {
     setWebGLSupported(isWebGLAvailable());
-  }, []);
-
-  const handleAxisConfigChange = useCallback((config: AxisConfig) => {
-    setAxisConfig(config);
   }, []);
 
   if (!webGLSupported) {
@@ -674,10 +671,6 @@ const RubiksCube3D = ({
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      <AxisCalibration
-        onConfigChange={handleAxisConfigChange}
-        currentOrientation={orientation}
-      />
       <Canvas
         shadows={quality !== 'low'}
         camera={{ position: [5, 4, 5], fov: 40 }}

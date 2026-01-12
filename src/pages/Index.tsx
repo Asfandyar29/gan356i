@@ -9,6 +9,7 @@ import TimerDisplay from '@/components/TimerDisplay';
 import ScrambleDisplay from '@/components/ScrambleDisplay';
 import CubeStats from '@/components/CubeStats';
 import RubiksCube3D from '@/components/RubiksCube3D';
+import AxisCalibration, { AxisConfig, loadAxisConfig } from '@/components/AxisCalibration';
 import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
 import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
 import { toast } from 'sonner';
@@ -64,6 +65,11 @@ const CubeTracker = () => {
     lastMove: null,
     moveHistory: [],
   });
+
+  const [axisConfig, setAxisConfig] = useState<AxisConfig>(loadAxisConfig);
+  const handleAxisConfigChange = useCallback((config: AxisConfig) => {
+    setAxisConfig(config);
+  }, []);
 
   // Guided Scrambling State
   const [scrambleIndex, setScrambleIndex] = useState(0);
@@ -393,88 +399,113 @@ const CubeTracker = () => {
     <div className="h-screen w-full relative bg-background text-foreground flex flex-col overflow-hidden selection:bg-primary/20">
       <NavBar />
 
-      <main className="flex-1 flex flex-col md:flex-row min-h-0 p-3 md:p-6 gap-6 max-w-[1600px] mx-auto w-full">
-        {/* Left Side: Controls, Timer, Stats */}
-        <div className="flex-[4] flex flex-col gap-4 overflow-y-auto pr-1 pb-10">
-          <header className="flex items-center justify-between gap-4 animate-fade-in">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-foreground/90">GAN Cube Tracker</h1>
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                {isDemoMode ? (
-                  <span className="text-warning flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
-                    Demo Mode
-                  </span>
-                ) : (
-                  <span className="text-success flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(0,165,80,0.5)]" />
-                    Live Tracking
-                  </span>
-                )}
-              </div>
-            </div>
-          </header>
+      <main className="flex-1 min-h-0 relative md:flex md:flex-row md:p-6 md:gap-6 max-w-[1600px] mx-auto w-full">
+        {/* Left Side: Controls, Timer, Stats
+            On Mobile: This becomes an overlay layer on top of the 3D view.
+            We use flex-col and justify-between to push Header/Timer to top and Controls/Stats to bottom.
+        */}
+        <div className="absolute inset-0 z-10 flex flex-col justify-between p-3 pb-6 pointer-events-none md:static md:z-auto md:flex md:w-[420px] md:flex-none md:justify-start md:gap-4 md:pointer-events-auto md:overflow-y-auto md:pr-1 md:pb-10 md:p-0">
 
-          <div className="glass-surface rounded-3xl p-6 border border-white/5 shadow-xl flex items-center justify-center animate-fade-in" style={{ animationDelay: '100ms' }}>
-            <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
-          </div>
-
-          <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
-            <ControlPanel
-              connectionState={isDemoMode ? 'connected' : connectionState}
-              onConnect={connect}
-              onDisconnect={isDemoMode ? handleExitDemo : disconnect}
-              onSync={syncCube}
-              onReset={() => {
-                if (isDemoMode) {
-                  setDemoState({
-                    facelets: createSolvedCube(),
-                    orientation: { x: 0, y: 0, z: 0 },
-                    batteryLevel: 87,
-                    moveCount: 0,
-                    lastMove: null,
-                    moveHistory: [],
-                  });
-                } else {
-                  resetCube();
-                }
-                resetTimer();
-                setScramble([]);
-                setIsScrambled(false);
-                setScrambleFollowed(false);
-                setWrongMoves([]);
-                setInspectionState('idle');
-                setIsRescueMode(false);
-              }}
-              onScramble={handleScramble}
-              onRescue={handleRescue}
-              deviceName={isDemoMode ? 'Demo Cube' : deviceName}
-            />
-          </div>
-
-          <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
-            <CubeStats cubeState={activeState} />
-          </div>
-
-          {timerState === 'stopped' && !analysisOpen && (
-            <div className="animate-scale-in">
-              <div
-                className="w-full p-4 rounded-2xl bg-success/10 border border-success/30 cursor-pointer hover:bg-success/20 transition-all text-center flex items-center justify-center gap-3 group"
-                onClick={() => setAnalysisOpen(true)}
-              >
-                <div className="text-success font-black text-lg group-hover:scale-105 transition-transform">
-                  🎉 {formattedTime}!
+          {/* Top Section: Header & Timer */}
+          <div className="flex flex-col gap-4 pointer-events-auto animate-fade-in">
+            <header className="flex items-center justify-between gap-4">
+              <div>
+                <h1 className="text-xl md:text-2xl font-black tracking-tight text-foreground/90 shadow-black/50 drop-shadow-md md:drop-shadow-none">GAN Cube Tracker</h1>
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-black/40 md:bg-transparent rounded-full px-2 py-0.5 md:p-0 w-fit backdrop-blur-sm md:backdrop-filter-none">
+                  {isDemoMode ? (
+                    <span className="text-warning flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                      Demo Mode
+                    </span>
+                  ) : (
+                    <span className="text-success flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(0,165,80,0.5)]" />
+                      Live Tracking
+                    </span>
+                  )}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-success/50">Details</div>
               </div>
+              <AxisCalibration
+                onConfigChange={handleAxisConfigChange}
+                currentOrientation={activeState.orientation}
+                className="relative z-20 flex items-center gap-2"
+              />
+            </header>
+
+            <div className="glass-surface rounded-3xl p-4 md:p-6 border border-white/5 shadow-xl flex items-center justify-center backdrop-blur-xl" style={{ animationDelay: '100ms' }}>
+              <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
             </div>
-          )}
+
+            {/* Analysis Toast Button (Positioned under timer on mobile, normal flow on desktop) */}
+            {timerState === 'stopped' && !analysisOpen && (
+              <div className="animate-scale-in">
+                <div
+                  className="w-full p-3 rounded-2xl bg-success/80 md:bg-success/10 backdrop-blur-md border border-success/30 cursor-pointer hover:bg-success/90 md:hover:bg-success/20 transition-all text-center flex items-center justify-center gap-3 group shadow-lg"
+                  onClick={() => setAnalysisOpen(true)}
+                >
+                  <div className="text-white md:text-success font-black text-lg group-hover:scale-105 transition-transform">
+                    🎉 {formattedTime}!
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-white/70 md:text-success/50">Details</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Section: Controls & Stats */}
+          {/* On Mobile: Push to bottom, glass background */}
+          <div className="flex flex-col gap-3 pointer-events-auto md:gap-4 animate-fade-in mt-auto md:mt-0" style={{ animationDelay: '200ms' }}>
+            {/* Stats - Compact on mobile */}
+            <div className="glass-surface md:bg-transparent md:border-none md:shadow-none rounded-2xl md:rounded-none p-1 md:p-0 backdrop-blur-xl">
+              <CubeStats cubeState={activeState} />
+            </div>
+
+            {/* Controls - Horizontal Scroll on small screens if needed */}
+            <div className={`
+              glass-surface rounded-3xl p-3 md:bg-transparent md:border-none md:shadow-none md:p-0 backdrop-blur-xl
+              ${timerState === 'running' ? 'opacity-30 pointer-events-none' : 'opacity-100'} transition-opacity duration-300
+            `}>
+              <ControlPanel
+                connectionState={isDemoMode ? 'connected' : connectionState}
+                onConnect={connect}
+                onDisconnect={isDemoMode ? handleExitDemo : disconnect}
+                onSync={syncCube}
+                onReset={() => {
+                  if (isDemoMode) {
+                    setDemoState({
+                      facelets: createSolvedCube(),
+                      orientation: { x: 0, y: 0, z: 0 },
+                      batteryLevel: 87,
+                      moveCount: 0,
+                      lastMove: null,
+                      moveHistory: [],
+                    });
+                  } else {
+                    resetCube();
+                  }
+                  resetTimer();
+                  setScramble([]);
+                  setIsScrambled(false);
+                  setScrambleFollowed(false);
+                  setWrongMoves([]);
+                  setInspectionState('idle');
+                  setIsRescueMode(false);
+                }}
+                onScramble={handleScramble}
+                onRescue={handleRescue}
+                deviceName={isDemoMode ? 'Demo Cube' : deviceName}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Right Side: 3D Cube & Overlays */}
-        <div className="flex-[6] flex flex-col gap-4 min-h-0">
-          <div className="flex-1 relative group bg-black/5 rounded-[2.5rem] p-1 border border-white/5 overflow-hidden ring-1 ring-white/5">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent z-10" />
+        {/* Right Side: 3D Cube & Overlays
+            On Mobile: Background layer (z-0)
+         */}
+        <div className="absolute inset-0 z-0 md:static md:flex-1 md:flex md:flex-col md:gap-4 md:min-h-0">
+          <div className="w-full h-full relative group bg-gradient-to-b from-background via-background/50 to-background md:bg-black/5 md:rounded-[2.5rem] md:p-1 md:border md:border-white/5 md:overflow-hidden md:ring-1 md:ring-white/5">
+            {/* Desktop Gradient Overlay */}
+            <div className="hidden md:block absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent z-10" />
 
             <Suspense fallback={
               <div className="absolute inset-0 flex items-center justify-center">
@@ -486,6 +517,7 @@ const CubeTracker = () => {
             }>
               <div className="h-full w-full">
                 <RubiksCube3D
+                  axisConfig={axisConfig}
                   facelets={activeState.facelets}
                   orientation={activeState.orientation}
                   lastMove={activeState.lastMove}
@@ -508,7 +540,7 @@ const CubeTracker = () => {
 
             {/* Rescue Mode Large Indicator */}
             {isRescueMode && !isCubeSolved(activeState.facelets) && (
-              <div className="absolute top-6 left-6 right-6 z-30 flex flex-col items-center animate-fade-in pointer-events-none">
+              <div className="absolute top-24 md:top-6 left-6 right-6 z-30 flex flex-col items-center animate-fade-in pointer-events-none">
                 <div className="bg-primary/20 backdrop-blur-md border border-primary/30 rounded-2xl px-6 py-4 shadow-xl mb-4 pointer-events-auto flex flex-col items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">
                     RESCUE MODE
@@ -528,7 +560,7 @@ const CubeTracker = () => {
             )}
 
             {(scramble.length > 0) && (
-              <div className="absolute top-20 left-6 right-6 pointer-events-none flex flex-col gap-4 animate-fade-in z-20">
+              <div className="absolute top-40 md:top-20 left-6 right-6 pointer-events-none flex flex-col gap-4 animate-fade-in z-20">
                 <div className="pointer-events-auto">
                   {inspectionState === 'running' && !isRescueMode && (
                     <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 border border-white/5 text-center mb-4">
