@@ -3,6 +3,7 @@ import * as CubeImport from 'cubejs';
 import 'cubejs/lib/solve';
 
 import { Facelets } from '@/types/cube';
+import { logger } from './logger';
 
 // Handle CommonJS/ESM interop
 const Cube = (CubeImport as any).default || CubeImport;
@@ -43,12 +44,12 @@ const getNotationMap = (facelets: Facelets) => {
 export const getCubeSolution = (facelets: Facelets): { solution: string | null; error?: string } => {
     try {
         if (!solverInitialized) {
-            console.log("Initializing CubeJS solver tables...");
+            logger.log("Initializing CubeJS solver tables...");
             try {
                 Cube.initSolver();
                 solverInitialized = true;
             } catch (initErr) {
-                console.error("CubeJS init failed:", initErr);
+                logger.error("CubeJS init failed:", initErr);
                 return { solution: null, error: `Solver init failed: ${initErr}` };
             }
         }
@@ -67,14 +68,14 @@ export const getCubeSolution = (facelets: Facelets): { solution: string | null; 
             stateString += char;
         }
 
-        console.log('Solving for state:', stateString);
+        logger.log('Solving for state:', stateString);
         const cube = Cube.fromString(stateString);
         const solution = cube.solve();
-        console.log('Solution found:', solution);
+        logger.log('Solution found:', solution);
 
         return { solution };
     } catch (err: any) {
-        console.error('Solver failed:', err);
+        logger.error('Solver failed:', err);
         return { solution: null, error: err.message || String(err) };
     }
 };

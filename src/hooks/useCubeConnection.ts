@@ -11,6 +11,7 @@ import {
 } from '@/types/cube';
 import { connectGanCube, GanCubeConnection, GanCubeEvent } from 'gan-web-bluetooth';
 import { Subscription } from 'rxjs';
+import { logger } from '@/lib/logger';
 
 interface UseCubeConnectionReturn {
   connectionState: ConnectionState;
@@ -122,7 +123,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
   const handleCubeEvent = useCallback((event: GanCubeEvent) => {
     switch (event.type) {
       case 'FACELETS':
-        console.log('[GAN] Received facelets:', event.facelets.length, event.facelets);
+        logger.log('[GAN] Received facelets:', event.facelets.length, event.facelets);
         setCubeState(prev => ({
           ...prev,
           facelets: kociembaToFacelets(event.facelets),
@@ -266,7 +267,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       subscriptionRef.current = conn.events$.subscribe({
         next: handleCubeEvent,
         error: (err) => {
-          console.error('[GAN] Event error:', err);
+          logger.error('[GAN] Event error:', err);
           setError('Connection lost');
           setConnectionState('disconnected');
         },
@@ -280,7 +281,7 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
       await conn.sendCubeCommand({ type: 'REQUEST_HARDWARE' });
 
     } catch (err) {
-      console.error('Connection error:', err);
+      logger.error('Connection error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect to cube';
       setError(errorMessage);
       setConnectionState('disconnected');

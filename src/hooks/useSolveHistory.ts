@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 
 // Validation schema for solve data
 const solveInputSchema = z.object({
@@ -74,7 +75,7 @@ export function useSolveHistory() {
       .limit(100);
 
     if (error) {
-      console.error('Error fetching solves:', error);
+      logger.error('Error fetching solves:', error);
     } else {
       setSolves(data || []);
     }
@@ -91,7 +92,7 @@ export function useSolveHistory() {
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching stats:', error);
+      logger.error('Error fetching stats:', error);
     } else if (data) {
       setStats({
         total_solves: data.total_solves || 0,
