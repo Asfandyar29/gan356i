@@ -695,12 +695,16 @@ const RubiksCube3D = ({
       >
         <color attach="background" args={['#050505']} />
 
-        <ambientLight intensity={0.4} />
-        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#44aaff" />
+        {/* Enhanced lighting for visibility even before Environment loads */}
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[5, 10, 5]} intensity={1.5} castShadow />
+        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1.2} castShadow />
+        <pointLight position={[-10, -10, -10]} intensity={0.6} color="#44aaff" />
+        <pointLight position={[10, 5, -5]} intensity={0.4} color="#ffffff" />
 
+        {/* Environment for reflections and IBL */}
         <Suspense fallback={null}>
-          <Environment preset="city" />
+          <Environment preset="city" background={false} />
         </Suspense>
 
         <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
