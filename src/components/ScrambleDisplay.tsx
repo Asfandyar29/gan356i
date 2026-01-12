@@ -5,14 +5,10 @@ interface ScrambleDisplayProps {
   currentIndex?: number;
   lastMoveCorrect?: boolean | null;
   title?: string;
+  onMoveClick?: (move: string, index: number) => void;
 }
 
-const getMoveArrow = (move: string) => {
-  if (move.endsWith("'")) return "↺";
-  return "↻";
-};
-
-const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, title = "Solution Scramble" }: ScrambleDisplayProps) => {
+const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, title = "Solution Scramble", onMoveClick }: ScrambleDisplayProps) => {
   if (scramble.length === 0) {
     return null;
   }
@@ -24,7 +20,7 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
       </div>
       <div className="flex flex-wrap gap-1.5 justify-center items-center">
         {scramble.map((move, index) => {
-          let className = "text-sm md:text-base font-black px-2 py-1 transition-all duration-300 min-w-[2.2rem] text-center rounded-lg";
+          let className = "text-sm md:text-base font-black px-2 py-1 transition-all duration-300 min-w-[2.2rem] text-center rounded-lg cursor-pointer select-none hover:scale-110 active:scale-95";
 
           if (index < currentIndex) {
             className += " text-white/10 line-through decoration-white/20";
@@ -35,11 +31,11 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
               className += " text-primary bg-primary/20 ring-1 ring-primary/40 shadow-[0_0_15px_rgba(59,130,246,0.2)] scale-110";
             }
           } else {
-            className += " text-white/50";
+            className += " text-white/50 hover:text-white";
           }
 
           return (
-            <div key={index} className="relative group">
+            <div key={index} className="relative group" onClick={() => onMoveClick?.(move, index)}>
               <span className={className}>
                 {move}
               </span>
@@ -57,7 +53,7 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
         ) : lastMoveCorrect === false ? (
           <span className="text-destructive tracking-widest">INCORRECT MOVE</span>
         ) : (
-          <span className="text-white/20">Follow sequence</span>
+          <span className="text-white/20">Click to apply (Demo) or Follow sequence</span>
         )}
       </div>
     </div>

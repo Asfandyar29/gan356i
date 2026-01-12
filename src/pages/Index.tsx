@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, Suspense, useRef, useMemo } from 'rea
 import { X } from 'lucide-react';
 import { useCubeConnection } from '@/hooks/useCubeConnection';
 import { useTimer } from '@/hooks/useTimer';
-import { generateScramble, isCubeSolved, createSolvedCube, CubeState } from '@/types/cube';
+import { generateScramble, isCubeSolved, createSolvedCube, CubeState, MoveEvent } from '@/types/cube';
 import ConnectPrompt from '@/components/ConnectPrompt';
 import ControlPanel from '@/components/ControlPanel';
 import TimerDisplay from '@/components/TimerDisplay';
@@ -15,6 +15,10 @@ import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
 import { toast } from 'sonner';
 import NavBar from '@/components/NavBar';
 import { getCubeSolution } from '@/lib/solver-service';
+import { applyMove as applyMoveLogic } from '@/lib/cube-solver';
+import { Play, FastForward } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
 
 const CubeTracker = () => {
   const {
@@ -82,6 +86,7 @@ const CubeTracker = () => {
 
   const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [solveHistory, setSolveHistory] = useState<MoveEvent[]>([]);
 
   const solveMetaData = useRef({ index: 0, time: 0 });
   const [isRescueMode, setIsRescueMode] = useState(false);
@@ -142,6 +147,114 @@ const CubeTracker = () => {
     });
     setFlatScramble(flat);
   }, [scramble]);
+
+  // DEMO MOVE APPLICATION
+  const handleRescue = useCallback(() => {
+    if (isCubeSolved(activeState.facelets)) {
+      toast.success("Cube is already solved!");
+      return;
+    }
+    const result = getCubeSolution(activeState.facelets);
+    if (result.solution) {
+      const moves = result.solution.trim().split(/\s+/).filter(Boolean);
+      setScramble(moves);
+      setIsRescueMode(true);
+      setIsScrambled(false);
+      setScrambleFollowed(false);
+      setScrambleIndex(0);
+      setWrongMoves([]);
+
+      // Explicitly stop inspection
+      setInspectionState('idle');
+      if (inspectionIntervalRef.current) {
+        clearInterval(inspectionIntervalRef.current);
+        inspectionIntervalRef.current = null;
+      }
+
+      toast.success(`Solution found: ${moves.length} moves`);
+    } else {
+      toast.error(`Solution failed: ${result.error || "Unknown error"}`);
+    }
+  }, [activeState.facelets]);
+
+  const applyVirtualMove = useCallback((moveStr: string) => {
+    if (!isDemoMode || !moveStr) return;
+
+    setDemoState(prev => {
+      let newFacelets = [...prev.facelets];
+      const face = moveStr[0] as any;
+      const isPrime = moveStr.includes("'");
+      const isDouble = moveStr.includes("2");
+      const direction = isPrime ? -1 : 1;
+
+      newFacelets = applyMoveLogic(newFacelets, face, direction);
+      if (isDouble) {
+        newFacelets = applyMoveLogic(newFacelets, face, direction);
+      }
+
+      const newMoveEvent = {
+        face,
+        direction: direction as 1 | -1,
+        timestamp: Date.now(),
+        notation: moveStr, // Simplified for demo
+        timeSinceLastMove: 0
+      };
+
+      return {
+        ...prev,
+        facelets: newFacelets,
+        moveCount: prev.moveCount + 1,
+        lastMove: newMoveEvent,
+        moveHistory: [...prev.moveHistory, newMoveEvent]
+      };
+    });
+  }, [isDemoMode]);
+
+  // Auto Follow Logic
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+
+  const handleAutoPlay = useCallback(() => {
+    if (isAutoPlaying) {
+      setIsAutoPlaying(false);
+      return;
+    }
+
+    if (scramble.length === 0) return;
+    setIsAutoPlaying(true);
+  }, [isAutoPlaying, scramble.length]);
+
+  // Auto-play effect: applies moves sequentially when active
+  useEffect(() => {
+    if (!isAutoPlaying || !isDemoMode) return;
+    if (scrambleIndex >= flatScramble.length) {
+      setIsAutoPlaying(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      // Use flatScramble (expanded moves) and let validation useEffect handle increment
+      const move = flatScramble[scrambleIndex];
+      applyVirtualMove(move);
+      // DON'T increment here - the validation useEffect will do it when it sees the correct move
+    }, 600); // 600ms delay between moves
+
+    return () => clearTimeout(timer);
+  }, [isAutoPlaying, scrambleIndex, flatScramble, applyVirtualMove, isDemoMode]);
+
+  // Stop auto play on completion
+  useEffect(() => {
+    if (scrambleFollowed && isAutoPlaying) {
+      setIsAutoPlaying(false);
+    }
+  }, [scrambleFollowed, isAutoPlaying]);
+
+  // Stop auto play on exit demo
+  useEffect(() => {
+    if (!isDemoMode && isAutoPlaying) {
+      setIsAutoPlaying(false);
+    }
+  }, [isDemoMode, isAutoPlaying]);
+
 
   // Helper to invert a move string
   const invertMove = (move: string) => {
@@ -296,10 +409,16 @@ const CubeTracker = () => {
         if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
         setInspectionState('idle');
         if (activeState.lastMove) {
+          // Set index to CURRENT length (next move will be the first solve move)
           solveMetaData.current = {
-            index: Math.max(0, activeState.moveHistory.length - 1),
+            index: activeState.moveHistory.length,
             time: activeState.lastMove.timestamp
           };
+          console.log('[Timer Start]', {
+            startIndex: activeState.moveHistory.length,
+            totalMoves: activeState.moveHistory.length,
+            lastMoveBeforeStart: activeState.lastMove.notation
+          });
           startTimer();
         }
       }
@@ -311,9 +430,30 @@ const CubeTracker = () => {
       stopTimer();
       const history = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
+
+      // Debug: Log what we're capturing
+      console.log('[Solve Detection]', {
+        totalHistory: activeState.moveHistory.length,
+        sliceFrom: solveMetaData.current.index,
+        solveHistory: history.length,
+        lastMove: history[history.length - 1]?.notation,
+        cubeIsSolved: isCubeSolved(activeState.facelets),
+        scramble: scramble.join(' ')
+      });
+
       const result = analyzeSolve(scramble, history, startTime);
-      setAnalysisStats(result);
-      setAnalysisOpen(true);
+
+      // Safety Check for Result
+      if (result && !isNaN(result.totalMoveCount)) {
+        console.log("[Stats] Analysis Result:", result);
+        setAnalysisStats(result);
+        setSolveHistory(history); // Store the solve moves for replay
+        // Small delay to allow render before opening to prevent potential race/crash?
+        requestAnimationFrame(() => setAnalysisOpen(true));
+      } else {
+        console.error("[Stats] Analysis returned invalid data", result);
+        toast.error("Analysis failed: Invalid data");
+      }
     }
   }, [activeState.facelets, timerState, stopTimer, scramble, activeState.moveHistory]);
 
@@ -333,33 +473,11 @@ const CubeTracker = () => {
     resetTimer();
   }, [resetTimer]);
 
-  const handleRescue = useCallback(() => {
-    if (isCubeSolved(activeState.facelets)) {
-      toast.success("Cube is already solved!");
-      return;
-    }
-    const result = getCubeSolution(activeState.facelets);
-    if (result.solution) {
-      const moves = result.solution.trim().split(/\s+/).filter(Boolean);
-      setScramble(moves);
-      setIsRescueMode(true);
-      setIsScrambled(false);
-      setScrambleFollowed(false);
-      setScrambleIndex(0);
-      setWrongMoves([]);
 
-      // Explicitly stop inspection
-      setInspectionState('idle');
-      if (inspectionIntervalRef.current) {
-        clearInterval(inspectionIntervalRef.current);
-        inspectionIntervalRef.current = null;
-      }
 
-      toast.success(`Solution found: ${moves.length} moves`);
-    } else {
-      toast.error(`Solution failed: ${result.error || "Unknown error"}`);
-    }
-  }, [activeState.facelets]);
+  // Actually, let's do this cleaner. 
+  // I will replace the imports and the whole function in one go properly.
+
 
   // Early return for WebGL support
   if (!webGLSupported) {
@@ -593,7 +711,30 @@ const CubeTracker = () => {
                               currentIndex={displayScrambleIndex}
                               lastMoveCorrect={lastMoveCorrect}
                               title={isRescueMode ? "RESCUE SEQUENCE" : "QUICK SCRAMBLE"}
+                              onMoveClick={(move, idx) => {
+                                if (isDemoMode) {
+                                  // Only allow clicking if it's the current move? Or any?
+                                  // User wants to debug, so maybe allow any, but standard flow follows index.
+                                  // Let's just apply it.
+                                  applyVirtualMove(move);
+                                }
+                              }}
                             />
+
+                            {/* Auto Play Button for Demo */}
+                            {isDemoMode && scramble.length > 0 && !scrambleFollowed && (
+                              <div className="absolute top-1/2 -left-10 -translate-y-1/2">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className={`rounded-full h-8 w-8 ${isAutoPlaying ? 'bg-primary text-white' : 'bg-white/5'}`}
+                                  onClick={handleAutoPlay}
+                                  title={isAutoPlaying ? "Stop Auto-Follow" : "Auto-Follow"}
+                                >
+                                  {isAutoPlaying ? <FastForward className="w-3.5 h-3.5 animate-pulse" /> : <Play className="w-3.5 h-3.5" />}
+                                </Button>
+                              </div>
+                            )}
                             <button
                               onClick={() => {
                                 setScramble([]);
@@ -627,7 +768,7 @@ const CubeTracker = () => {
         onOpenChange={setAnalysisOpen}
         stats={analysisStats}
         scramble={scramble}
-        debugHistory={activeState.moveHistory}
+        debugHistory={solveHistory}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { RotateCcw, Settings, X, Move3D, Crosshair } from 'lucide-react';
@@ -21,10 +22,6 @@ export interface AxisConfig {
   quality: 'low' | 'medium' | 'high';
 }
 
-// Default config based on user's working settings:
-// Pitch (X) = Gyro X, Inverted
-// Yaw (Y) = Gyro Z, Normal  
-// Roll (Z) = Gyro Y, Inverted
 const defaultConfig: AxisConfig = {
   xSource: 'x',
   ySource: 'z',
@@ -37,10 +34,9 @@ const defaultConfig: AxisConfig = {
   offsetY: 0,
   offsetZ: 0,
   offsetQuaternion: null,
-  quality: 'high', // Default for desktop
+  quality: 'high',
 };
 
-// Simple mobile detection
 const isMobile = () => {
   if (typeof window === 'undefined') return false;
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -50,18 +46,10 @@ export const loadAxisConfig = (): AxisConfig => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...defaultConfig, ...parsed };
+      return { ...defaultConfig, ...JSON.parse(saved) };
     }
-  } catch {
-    // ignore
-  }
-
-  // If no saved config and on mobile, default to low quality
-  if (isMobile()) {
-    return { ...defaultConfig, quality: 'low' };
-  }
-
+  } catch { } // eslint-disable-line no-empty
+  if (isMobile()) return { ...defaultConfig, quality: 'low' };
   return defaultConfig;
 };
 
@@ -90,7 +78,6 @@ const AxisCalibration = ({ onConfigChange, currentOrientation, className }: Axis
     localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultConfig));
   };
 
-  // ... (rest of helper functions same as before) ...
   const setCurrentAsNeutral = () => {
     if (currentOrientation) {
       const updates: Partial<AxisConfig> = {
@@ -98,26 +85,21 @@ const AxisCalibration = ({ onConfigChange, currentOrientation, className }: Axis
         offsetY: -currentOrientation[config.ySource],
         offsetZ: -currentOrientation[config.zSource],
       };
-
       if (currentOrientation.quaternion) {
         const { x, y, z, w } = currentOrientation.quaternion;
         updates.offsetQuaternion = { x: -x, y: -y, z: -z, w: w };
       }
-
       updateConfig(updates);
     }
   };
 
   const swapAxes = (axis1: 'x' | 'y' | 'z', axis2: 'x' | 'y' | 'z') => {
-    const sourceKey1 = `${axis1}Source` as keyof AxisConfig;
-    const sourceKey2 = `${axis2}Source` as keyof AxisConfig;
-    const source1 = config[sourceKey1] as 'x' | 'y' | 'z';
-    const source2 = config[sourceKey2] as 'x' | 'y' | 'z';
-
+    const s1 = (config as any)[`${axis1}Source`];
+    const s2 = (config as any)[`${axis2}Source`];
     updateConfig({
-      [sourceKey1]: source2,
-      [sourceKey2]: source1,
-    });
+      [`${axis1}Source`]: s2,
+      [`${axis2}Source`]: s1,
+    } as any);
   };
 
   const axisLabels: { key: 'x' | 'y' | 'z'; label: string; color: string; description: string }[] = [
@@ -126,206 +108,200 @@ const AxisCalibration = ({ onConfigChange, currentOrientation, className }: Axis
     { key: 'z', label: 'Roll', color: 'text-blue-400', description: 'Tilt sideways' },
   ];
 
-  const sourceOptions: { value: 'x' | 'y' | 'z'; label: string }[] = [
+  const sourceOptions = [
     { value: 'x', label: 'Gyro X' },
     { value: 'y', label: 'Gyro Y' },
     { value: 'z', label: 'Gyro Z' },
   ];
 
-  // Compact toggle button when closed
-  if (!isOpen) {
-    return (
-      <div className={className || "absolute top-28 md:top-4 left-4 z-10 flex items-center gap-2"}>
-        <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-border">
-          <Move3D className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Gyro</span>
-          <Switch
-            checked={config.gyroEnabled}
-            onCheckedChange={(checked) => updateConfig({ gyroEnabled: checked })}
-            className="scale-75"
-          />
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsOpen(true)}
-          className="bg-background/80 backdrop-blur-sm hover:bg-background/90 border border-border"
-        >
-          <Settings className="w-4 h-4" />
-        </Button>
+  // Trigger Button Structure
+  const triggerButton = (
+    <div className={className || "absolute top-28 md:top-4 left-4 z-10 flex items-center gap-2"}>
+      <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-border">
+        <Move3D className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Gyro</span>
+        <Switch
+          checked={config.gyroEnabled}
+          onCheckedChange={(checked) => updateConfig({ gyroEnabled: checked })}
+          className="scale-75"
+        />
       </div>
-    );
-  }
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsOpen(true)}
+        className="bg-background/80 backdrop-blur-sm hover:bg-background/90 border border-border"
+      >
+        <Settings className="w-4 h-4" />
+      </Button>
+    </div>
+  );
 
-  return (
-    // Fixed modal overlay
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-background border border-border rounded-xl p-4 shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto relative">
-        <div className="flex items-center justify-between mb-4 sticky top-0 bg-background pt-2 pb-2 z-10 border-b border-border/50">
+  // Modal Content via Portal
+  const modalContent = isOpen ? createPortal(
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 text-left">
+      {/* Backdrop with Blur */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+        onClick={() => setIsOpen(false)}
+      />
+
+      {/* Modal Card */}
+      <div className="relative z-10 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col overflow-hidden text-zinc-100 animate-in zoom-in-95 duration-200">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b border-zinc-800 bg-zinc-950 shrink-0">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-primary" />
-            <span className="text-sm font-semibold">Gyro Settings</span>
+            <span className="text-sm font-bold text-zinc-100">Gyro Settings</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsOpen(false)}>
-            <X className="w-4 h-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-zinc-800 text-zinc-400" onClick={() => setIsOpen(false)}>
+            <X className="w-5 h-5" />
           </Button>
         </div>
 
-        {/* Gyro Toggle */}
-        <div className="flex items-center justify-between mb-4 p-2 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Move3D className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm">Enable Gyro Tracking</span>
-          </div>
-          <Switch
-            checked={config.gyroEnabled}
-            onCheckedChange={(checked) => updateConfig({ gyroEnabled: checked })}
-          />
-        </div>
+        {/* Scrollable Content */}
+        <div className="overflow-y-auto p-3 space-y-4 bg-zinc-950">
 
-        {/* Quality Settings */}
-        <div className="mb-4 space-y-2">
-          <label className="text-xs text-muted-foreground">Performance Mode</label>
-          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
-            {(['low', 'medium', 'high'] as const).map((q) => (
-              <Button
-                key={q}
-                variant={config.quality === q ? "default" : "ghost"}
-                size="sm"
-                className="flex-1 h-7 text-[10px] uppercase font-bold rounded-md"
-                onClick={() => updateConfig({ quality: q })}
-              >
-                {q}
-              </Button>
-            ))}
-          </div>
-          {config.quality === 'low' && (
-            <p className="text-[10px] text-muted-foreground/80 leading-tight">
-              Optimized for mobile: reflections and shadows disabled.
-            </p>
-          )}
-        </div>
-
-        {config.gyroEnabled && (
-          <>
-            {/* Set Current as Neutral */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mb-4"
-              onClick={setCurrentAsNeutral}
-            >
-              <Crosshair className="w-4 h-4 mr-2" />
-              Set Current Position as Neutral
-            </Button>
-
-            {/* Current Values Display */}
-            {currentOrientation && (
-              <div className="mb-4 p-2 bg-muted/30 rounded-lg">
-                <div className="text-xs text-muted-foreground mb-1">Current Gyro Values (Euler):</div>
-                <div className="flex gap-2 text-xs font-mono mb-2">
-                  <span className="text-red-400">X: {currentOrientation.x.toFixed(0)}°</span>
-                  <span className="text-green-400">Y: {currentOrientation.y.toFixed(0)}°</span>
-                  <span className="text-blue-400">Z: {currentOrientation.z.toFixed(0)}°</span>
+          {/* Main Toggles */}
+          <div className="space-y-3">
+            {/* Enable Gyro */}
+            <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-primary/10 rounded-md">
+                  <Move3D className="w-4 h-4 text-primary" />
                 </div>
-                {currentOrientation.quaternion && (
-                  <>
-                    <div className="text-xs text-muted-foreground mb-1">Quaternion:</div>
-                    <div className="grid grid-cols-2 gap-1 text-xs font-mono">
-                      <span className="text-foreground">X: {currentOrientation.quaternion.x.toFixed(3)}</span>
-                      <span className="text-foreground">Y: {currentOrientation.quaternion.y.toFixed(3)}</span>
-                      <span className="text-foreground">Z: {currentOrientation.quaternion.z.toFixed(3)}</span>
-                      <span className="text-foreground">W: {currentOrientation.quaternion.w.toFixed(3)}</span>
-                    </div>
-                  </>
-                )}
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-zinc-200">Tracking</span>
+                  <span className="text-[10px] text-zinc-500">Enable gyro feedback</span>
+                </div>
               </div>
-            )}
+              <Switch
+                checked={config.gyroEnabled}
+                onCheckedChange={(checked) => updateConfig({ gyroEnabled: checked })}
+                className="data-[state=checked]:bg-primary"
+              />
+            </div>
 
-            {/* Axis Mappings */}
-            <div className="space-y-3 mb-4">
-              <div className="text-xs text-muted-foreground mb-2">Axis Mapping</div>
+            {/* Performance Mode */}
+            <div className="p-3 bg-zinc-900/50 rounded-lg border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Performance</span>
+                <span className="text-[10px] text-zinc-500">{config.quality}</span>
+              </div>
+              <div className="flex bg-zinc-950 rounded-md p-1 border border-zinc-800">
+                {(['low', 'medium', 'high'] as const).map((q) => (
+                  <button
+                    key={q}
+                    className={`flex-1 py-1.5 text-[10px] uppercase font-bold rounded transition-all ${config.quality === q ? 'bg-zinc-700 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    onClick={() => updateConfig({ quality: q })}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
-              {axisLabels.map(({ key, label, color, description }) => {
-                const sourceKey = `${key}Source` as keyof AxisConfig;
-                const invertKey = `${key}Invert` as keyof AxisConfig;
+          {config.gyroEnabled && (
+            <>
+              {/* Calibration */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-9 text-xs font-medium bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+                onClick={setCurrentAsNeutral}
+              >
+                <Crosshair className="w-3.5 h-3.5 mr-2" />
+                Set Current Position as Neutral
+              </Button>
 
-                return (
-                  <div key={key} className="p-2 bg-muted/30 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <span className={`text-sm font-medium ${color}`}>{label}</span>
-                        <span className="text-xs text-muted-foreground ml-2">({description})</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={config[sourceKey] as string}
-                        onChange={(e) => updateConfig({ [sourceKey]: e.target.value as 'x' | 'y' | 'z' })}
-                        className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5"
-                      >
-                        {sourceOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                      <Button
-                        variant={config[invertKey] as boolean ? "default" : "outline"}
-                        size="sm"
-                        className="h-7 text-xs px-3 min-w-[60px]"
-                        onClick={() => updateConfig({ [invertKey]: !(config[invertKey] as boolean) })}
-                      >
-                        {config[invertKey] as boolean ? 'Inverted' : 'Normal'}
-                      </Button>
-                    </div>
+              {/* Current Values (Compact) */}
+              {currentOrientation && (
+                <div className="bg-zinc-900/30 rounded-lg border border-zinc-800 p-2">
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    <span className="text-red-400 font-semibold">X: {currentOrientation.x.toFixed(0)}°</span>
+                    <span className="text-green-400 font-semibold">Y: {currentOrientation.y.toFixed(0)}°</span>
+                    <span className="text-blue-400 font-semibold">Z: {currentOrientation.z.toFixed(0)}°</span>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              )}
 
-            {/* Quick Swap Buttons */}
-            <div className="mb-4">
-              <div className="text-xs text-muted-foreground mb-2">Quick Swap</div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => swapAxes('x', 'y')}
-                >
-                  X ↔ Y
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => swapAxes('y', 'z')}
-                >
-                  Y ↔ Z
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => swapAxes('x', 'z')}
-                >
-                  X ↔ Z
-                </Button>
+              {/* Axis Mapping */}
+              <div className="space-y-2">
+                <div className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 px-1">Axis Mapping</div>
+                <div className="grid gap-2">
+                  {axisLabels.map(({ key, label, color, description }) => {
+                    const sourceKey = `${key}Source` as keyof AxisConfig;
+                    const invertKey = `${key}Invert` as keyof AxisConfig;
+
+                    return (
+                      <div key={key} className="flex items-center gap-2 p-2 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                        <div className="w-10 text-xs font-bold shrink-0 text-zinc-300">{label}</div>
+
+                        <select
+                          value={config[sourceKey] as string}
+                          onChange={(e) => updateConfig({ [sourceKey]: e.target.value as 'x' | 'y' | 'z' })}
+                          className="flex-1 h-7 text-xs bg-zinc-950 border border-zinc-800 rounded px-2 text-zinc-300 focus:ring-1 focus:ring-primary focus:outline-none"
+                        >
+                          {sourceOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label.replace('Gyro ', '')} Axis</option>
+                          ))}
+                        </select>
+
+                        <Button
+                          variant={config[invertKey] as boolean ? "default" : "secondary"}
+                          size="sm"
+                          className={`h-7 px-2 text-[10px] font-bold min-w-[3rem] ${config[invertKey] ? '' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+                          onClick={() => updateConfig({ [invertKey]: !(config[invertKey] as boolean) })}
+                        >
+                          {config[invertKey] as boolean ? 'INV' : 'NOR'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </>
-        )}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs"
-          onClick={resetConfig}
-        >
-          <RotateCcw className="w-3 h-3 mr-1" />
-          Reset to Default
-        </Button>
+              {/* Quick Swap */}
+              <div className="grid grid-cols-3 gap-2">
+                <Button variant="outline" size="sm" className="h-7 text-[10px] bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white" onClick={() => swapAxes('x', 'y')}>X ↔ Y</Button>
+                <Button variant="outline" size="sm" className="h-7 text-[10px] bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white" onClick={() => swapAxes('y', 'z')}>Y ↔ Z</Button>
+                <Button variant="outline" size="sm" className="h-7 text-[10px] bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white" onClick={() => swapAxes('x', 'z')}>X ↔ Z</Button>
+              </div>
+            </>
+          )}
+
+          {/* Close Button (Bottom Mobile access) */}
+          <Button
+            variant="ghost"
+            className="w-full text-zinc-500 hover:text-white md:hidden"
+            onClick={() => setIsOpen(false)}
+          >
+            Close Settings
+          </Button>
+
+          {/* Reset */}
+          <div className="flex justify-center pt-2">
+            <button
+              className="text-[10px] text-zinc-600 hover:text-red-400 flex items-center gap-1 transition-colors"
+              onClick={resetConfig}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset Defaults
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
+  ) : null;
+
+  return (
+    <>
+      {triggerButton}
+      {modalContent}
+    </>
   );
 };
 

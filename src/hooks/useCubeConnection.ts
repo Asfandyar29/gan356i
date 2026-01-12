@@ -146,18 +146,22 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
           notation += "'";
         }
 
-        const moveEvent: MoveEvent = {
-          face,
-          direction,
-          notation,
-          timestamp: event.timestamp,
-        };
-        setCubeState(prev => ({
-          ...prev,
-          moveCount: moveCountRef.current,
-          lastMove: moveEvent,
-          moveHistory: [...prev.moveHistory, moveEvent],
-        }));
+        setCubeState(prev => {
+          const moveEvent: MoveEvent = {
+            face,
+            direction,
+            notation,
+            timestamp: event.timestamp,
+            orientation: prev.orientation,
+          };
+
+          return {
+            ...prev,
+            moveCount: moveCountRef.current,
+            lastMove: moveEvent,
+            moveHistory: [...prev.moveHistory, moveEvent],
+          };
+        });
         break;
 
       case 'GYRO':

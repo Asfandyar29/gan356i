@@ -38,6 +38,7 @@ export interface MoveEvent {
   direction: 1 | -1;  // 1 = clockwise, -1 = counter-clockwise
   notation: string;
   timestamp: number;
+  orientation?: CubeOrientation;
 }
 
 // Full cube state
