@@ -276,8 +276,20 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
                             <RubiksCube3D
                                 facelets={currentFacelets}
                                 orientation={currentOrientation}
-                                // No strict axis config needed, let it represent state
-                                axisConfig={{ mode: 'auto', center: true }}
+                                axisConfig={{
+                                    xSource: 'x',
+                                    ySource: 'z',
+                                    zSource: 'y',
+                                    xInvert: true,
+                                    yInvert: false,
+                                    zInvert: true,
+                                    gyroEnabled: false,
+                                    offsetX: 0,
+                                    offsetY: 0,
+                                    offsetZ: 0,
+                                    offsetQuaternion: null,
+                                    quality: 'high',
+                                }}
                                 isError={false}
                             />
 
@@ -305,7 +317,7 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
                                 <Button size="icon" variant="ghost" onClick={() => setReplayIndex(Math.min(replaySteps.length, replayIndex + 1))}>
                                     <ChevronRight className="w-5 h-5" />
                                 </Button>
-                                <Button size="icon" variant="ghost" onClick={() => setIsPlaying(false) || setReplayIndex(replaySteps.length)} title="End">
+                                <Button size="icon" variant="ghost" onClick={() => { setIsPlaying(false); setReplayIndex(replaySteps.length); }} title="End">
                                     <FastForward className="w-4 h-4" />
                                 </Button>
                             </div>
