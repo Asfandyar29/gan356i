@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
+import { useRef, useMemo, useState, useEffect, useCallback, Suspense } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, MeshReflectorMaterial, ContactShadows, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
@@ -141,7 +141,7 @@ const easeInOutCubic = (t: number): number => {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 };
 
-const GanLogo = () => {
+const GanLogoInner = () => {
   const texture = useLoader(THREE.TextureLoader, '/gan-logo.png');
 
   return (
@@ -154,6 +154,14 @@ const GanLogo = () => {
         polygonOffsetFactor={-1}
       />
     </mesh>
+  );
+};
+
+const GanLogo = () => {
+  return (
+    <Suspense fallback={null}>
+      <GanLogoInner />
+    </Suspense>
   );
 };
 
@@ -691,7 +699,9 @@ const RubiksCube3D = ({
         <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
         <pointLight position={[-10, -10, -10]} intensity={0.5} color="#44aaff" />
 
-        <Environment preset="city" />
+        <Suspense fallback={null}>
+          <Environment preset="city" />
+        </Suspense>
 
         <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
           <CubeGroup
@@ -700,7 +710,7 @@ const RubiksCube3D = ({
             axisConfig={axisConfig}
             lastMove={lastMove}
             nextMove={nextMove}
-            isError={isError} // Pass isError to CubeGroup
+            isError={isError}
           />
         </Float>
 
