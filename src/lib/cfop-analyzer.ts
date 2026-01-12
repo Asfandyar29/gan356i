@@ -6,6 +6,7 @@ import {
     checkOLLD, checkOLLU,
     checkPLL
 } from './cube-solver';
+import { logger } from './logger';
 
 export interface SolvedStage {
     timestamp: number;
@@ -42,7 +43,7 @@ const parseMoveString = (moveStr: string): { face: CubeFace; direction: 1 | -1 }
 export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], startTime: number): CFOPStats | null => {
     let facelets = createSolvedCube();
 
-    console.log('[CFOP] Starting analysis', {
+    logger.log('[CFOP] Starting analysis', {
         scrambleLength: scramble.length,
         historyLength: moveHistory.length,
         scramble: scramble.join(' '),
@@ -57,7 +58,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
         });
     });
 
-    console.log('[CFOP] After scramble, D edges:', facelets[28], facelets[30], facelets[32], facelets[34]);
+    logger.log('[CFOP] After scramble, D edges:', facelets[28], facelets[30], facelets[32], facelets[34]);
 
     let baseFace: 'U' | 'D' | null = null;
     let crossDone: number | null = null;
@@ -72,7 +73,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
 
         // Log first 3 moves for debugging
         if (i < 3) {
-            console.log(`[CFOP] Applying move ${i}: ${move.notation} (face=${move.face}, dir=${move.direction})`);
+            logger.log(`[CFOP] Applying move ${i}: ${move.notation} (face=${move.face}, dir=${move.direction})`);
         }
 
         facelets = applyMove(facelets, move.face, move.direction);
@@ -83,12 +84,12 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 baseFace = 'D';
                 crossDone = move.timestamp;
                 moveCounts.cross = i + 1;
-                console.log(`[CFOP] Cross (D) detected at move ${i + 1}`);
+                logger.log(`[CFOP] Cross (D) detected at move ${i + 1}`);
             } else if (checkCrossU(facelets)) {
                 baseFace = 'U';
                 crossDone = move.timestamp;
                 moveCounts.cross = i + 1;
-                console.log(`[CFOP] Cross (U) detected at move ${i + 1}`);
+                logger.log(`[CFOP] Cross (U) detected at move ${i + 1}`);
             }
         } else {
             // F2L
@@ -97,7 +98,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (isF2L) {
                     f2lDone = move.timestamp;
                     moveCounts.f2l = i + 1 - moveCounts.cross;
-                    console.log(`[CFOP] F2L detected at move ${i + 1}`);
+                    logger.log(`[CFOP] F2L detected at move ${i + 1}`);
                 }
             }
 
@@ -107,7 +108,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (isOLL) {
                     ollDone = move.timestamp;
                     moveCounts.oll = i + 1 - (moveCounts.cross + moveCounts.f2l);
-                    console.log(`[CFOP] OLL detected at move ${i + 1}`);
+                    logger.log(`[CFOP] OLL detected at move ${i + 1}`);
                 }
             }
 
@@ -116,7 +117,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
                 if (checkPLL(facelets)) {
                     pllDone = move.timestamp;
                     moveCounts.pll = i + 1 - (moveCounts.cross + moveCounts.f2l + moveCounts.oll);
-                    console.log(`[CFOP] PLL detected at move ${i + 1}`);
+                    logger.log(`[CFOP] PLL detected at move ${i + 1}`);
                 }
             }
         }
@@ -150,7 +151,7 @@ export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], start
 
     // Debug: log final cube state if F2L failed
     if (!f2lDone && crossDone) {
-        console.log('[CFOP] F2L never detected! Final facelets U:',
+        logger.log('[CFOP] F2L never detected! Final facelets U:',
             facelets.slice(0, 9).join(','),
             'F:', facelets.slice(18, 27).join(','),
             'R:', facelets.slice(9, 18).join(','));
