@@ -40,25 +40,38 @@ const parseMoveString = (moveStr: string): { face: CubeFace; direction: 1 | -1 }
     }
 };
 
-export const analyzeSolve = (scramble: string[], moveHistory: MoveEvent[], startTime: number): CFOPStats | null => {
-    let facelets = createSolvedCube();
+export const analyzeSolve = (
+    scramble: string[], 
+    moveHistory: MoveEvent[], 
+    startTime: number,
+    preScrambledFacelets?: Facelets // Optional: use actual scrambled state from cube
+): CFOPStats | null => {
+    let facelets: Facelets;
+
+    // If we have the actual scrambled facelets from the cube, use them
+    // Otherwise, reconstruct by applying scramble to solved cube
+    if (preScrambledFacelets) {
+        facelets = [...preScrambledFacelets] as Facelets;
+        logger.log('[CFOP] Using captured scrambled facelets from cube');
+    } else {
+        facelets = createSolvedCube();
+        // Apply scramble
+        scramble.forEach(moveStr => {
+            const moves = parseMoveString(moveStr);
+            moves.forEach(m => {
+                facelets = applyMove(facelets, m.face, m.direction);
+            });
+        });
+        logger.log('[CFOP] Reconstructed scramble from notation');
+    }
 
     logger.log('[CFOP] Starting analysis', {
         scrambleLength: scramble.length,
         historyLength: moveHistory.length,
         scramble: scramble.join(' '),
-        firstFewMoves: moveHistory.slice(0, 3).map(m => m.notation)
+        firstFewMoves: moveHistory.slice(0, 3).map(m => m.notation),
+        usingCapturedFacelets: !!preScrambledFacelets
     });
-
-    // Apply scramble
-    scramble.forEach(moveStr => {
-        const moves = parseMoveString(moveStr);
-        moves.forEach(m => {
-            facelets = applyMove(facelets, m.face, m.direction);
-        });
-    });
-
-    logger.log('[CFOP] After scramble, D edges:', facelets[28], facelets[30], facelets[32], facelets[34]);
 
     let baseFace: 'U' | 'D' | null = null;
     let crossDone: number | null = null;
