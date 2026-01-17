@@ -22,7 +22,7 @@ interface SolveAnalysisDialogProps {
     stats: CFOPStats | null;
     scramble: string[];
     debugHistory: MoveEvent[];
-    scrambledFacelets?: Facelets | null; // Actual scrambled state from cube
+    scrambleMoves?: MoveEvent[]; // Actual scramble moves from moveHistory for accurate replay
 }
 
 const formatTime = (ms: number) => {
@@ -44,7 +44,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory, scrambledFacelets }: SolveAnalysisDialogProps) => {
+const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory, scrambleMoves }: SolveAnalysisDialogProps) => {
 
     // Replay State
     const [replayIndex, setReplayIndex] = useState(0); // 0 = Scrambled state, N = After Nth step
@@ -96,80 +96,58 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
     }, [debugHistory]);
 
     // Compute Facelets for current index
+    // Use actual scramble moves from moveHistory for accurate replay
     const currentFacelets = useMemo(() => {
-        let f: Facelets;
+        // Always start from solved cube
+        let f: Facelets = createSolvedCube();
+        
+        // Apply actual scramble moves if available (most accurate)
+        // These are the moves the user performed on the physical cube
+        if (scrambleMoves && scrambleMoves.length > 0) {
+            scrambleMoves.forEach(move => {
+                f = applyMove(f, move.face, move.direction);
+            });
+            console.log('[Replay] Applied', scrambleMoves.length, 'actual scramble moves');
+        } else if (scramble && scramble.length > 0) {
+            // Fallback: Apply scramble from notation
+            scramble.forEach(moveStr => {
+                const face = moveStr[0] as CubeFace;
+                const isPrime = moveStr.includes("'");
+                const isDouble = moveStr.includes("2");
+                const direction: 1 | -1 = isPrime ? -1 : 1;
 
-        // CRITICAL: Use captured scrambled facelets if available (most accurate)
-        // Otherwise fall back to reconstructing from solved + scramble
-        if (scrambledFacelets) {
-            f = [...scrambledFacelets] as Facelets;
-            console.log('[Replay] Using captured scrambled facelets from cube');
-        } else {
-            f = createSolvedCube();
-            // Apply Scramble
-            if (scramble) {
-                scramble.forEach(moveStr => {
-                    const face = moveStr[0] as CubeFace;
-                    const isPrime = moveStr.includes("'");
-                    const isDouble = moveStr.includes("2");
-                    const direction: 1 | -1 = isPrime ? -1 : 1;
-
+                f = applyMove(f, face, direction);
+                if (isDouble) {
                     f = applyMove(f, face, direction);
-                    if (isDouble) {
-                        f = applyMove(f, face, direction); // Apply twice for 2
-                    }
-                });
-            }
-            console.log('[Replay] Reconstructed scramble from notation');
+                }
+            });
+            console.log('[Replay] Applied scramble from notation (fallback)');
         }
 
-        // 2. Apply raw moves directly using face and direction (not notation)
+        // Apply solve moves
         let rawMoveCount = 0;
         for (let i = 0; i < Math.min(replayIndex, replaySteps.length); i++) {
             const step = replaySteps[i];
             step.moves.forEach(m => {
-                // Use face and direction directly from the move object
                 f = applyMove(f, m.face, m.direction);
                 rawMoveCount++;
             });
         }
 
-        // Debug logging
-        const totalRawMoves = debugHistory?.length || 0;
         const atEnd = replayIndex >= replaySteps.length;
         const solved = isCubeSolved(f);
 
+        // Debug only at end
         if (atEnd) {
-            const solvedCube = createSolvedCube();
-            const differences = [];
-            for (let i = 0; i < f.length; i++) {
-                if (f[i] !== solvedCube[i]) {
-                    differences.push({ index: i, actual: f[i], expected: solvedCube[i] });
-                }
-            }
-
-            console.log('[Replay] At end - Comparison:', {
-                scrambleReceived: scramble?.join(' '),
-                usingCapturedFacelets: !!scrambledFacelets,
-                totalDifferences: differences.length,
-                firstDiffs: differences.slice(0, 10),
-                isSolved: solved
+            console.log('[Replay] At end:', {
+                solved,
+                scrambleMovesUsed: scrambleMoves?.length || 0,
+                solveMoves: rawMoveCount
             });
         }
 
-        console.log('[Replay]', {
-            replayIndex,
-            totalSteps: replaySteps.length,
-            rawMovesApplied: rawMoveCount,
-            totalRawMoves,
-            percentComplete: totalRawMoves > 0 ? ((rawMoveCount / totalRawMoves) * 100).toFixed(1) + '%' : '0%',
-            atEnd,
-            isSolved: solved,
-            usingCapturedFacelets: !!scrambledFacelets
-        });
-
         return f;
-    }, [scramble, scrambledFacelets, replayIndex, replaySteps, debugHistory]);
+    }, [scramble, scrambleMoves, replayIndex, replaySteps]);
 
     // Current Orientation
     const currentOrientation = useMemo(() => {
