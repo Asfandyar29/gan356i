@@ -400,12 +400,22 @@ const CubeTracker = () => {
   }, [scramble, scrambleIndex, displayScrambleIndex, scrambleFollowed]);
 
   const movesAtInspectionStart = useRef(0);
+  // CRITICAL: Store facelets at the START of inspection (after scramble, before solving)
+  const faceletsAtInspectionStart = useRef<Facelets | null>(null);
+  
   useEffect(() => {
     if (inspectionState === 'running' && movesAtInspectionStart.current === 0) {
       movesAtInspectionStart.current = activeState.moveCount;
+      // Capture the scrambled facelets RIGHT when inspection starts
+      // This is the state after scramble is complete, before any solve moves
+      faceletsAtInspectionStart.current = [...activeState.facelets] as Facelets;
+      console.log('[Inspection Start] Captured scrambled facelets');
     }
-    if (inspectionState === 'idle') movesAtInspectionStart.current = 0;
-  }, [inspectionState, activeState.moveCount]);
+    if (inspectionState === 'idle') {
+      movesAtInspectionStart.current = 0;
+      faceletsAtInspectionStart.current = null;
+    }
+  }, [inspectionState, activeState.moveCount, activeState.facelets]);
 
   useEffect(() => {
     if (timerState !== 'idle' || !scrambleFollowed) return;
@@ -422,27 +432,21 @@ const CubeTracker = () => {
           };
           // Capture the exact scramble used for this solve
           solveScrambleRef.current = [...scramble];
-          // CRITICAL: Capture the ACTUAL scrambled facelets from the cube
-          // This is the state BEFORE the first solve move was applied
-          // We need to reconstruct it by "undoing" the first move
-          const currentFacelets = [...activeState.facelets] as Facelets;
-          // Undo the first solve move to get the scrambled state
-          const firstMove = activeState.lastMove;
-          const invertedDirection = (firstMove.direction * -1) as 1 | -1;
-          scrambledFaceletsRef.current = applyMoveLogic(currentFacelets, firstMove.face, invertedDirection);
+          // Use the facelets captured at inspection start (before any solve moves)
+          scrambledFaceletsRef.current = faceletsAtInspectionStart.current;
           
           console.log('[Timer Start]', {
             startIndex: activeState.moveHistory.length - 1,
             totalMoves: activeState.moveHistory.length,
             firstSolveMove: activeState.lastMove.notation,
             scrambleCaptured: scramble.join(' '),
-            scrambledFaceletsCaptured: true
+            scrambledFaceletsCaptured: !!scrambledFaceletsRef.current
           });
           startTimer();
         }
       }
     }
-  }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer]);
+  }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer, scramble]);
 
   useEffect(() => {
     if (timerState === 'running' && isCubeSolved(activeState.facelets)) {
