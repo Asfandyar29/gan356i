@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Play, Pause, ChevronLeft, ChevronRight, RotateCcw, FastForward } from 'lucide-react';
 import RubiksCube3D from './RubiksCube3D';
 import { applyMove } from '@/lib/cube-solver.ts';
-import { createSolvedCube, CubeState, MoveEvent, isCubeSolved } from '@/types/cube';
+import { createSolvedCube, CubeState, MoveEvent, isCubeSolved, Facelets, CubeFace } from '@/types/cube';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,6 +22,7 @@ interface SolveAnalysisDialogProps {
     stats: CFOPStats | null;
     scramble: string[];
     debugHistory: MoveEvent[];
+    scrambledFacelets?: Facelets | null; // Actual scrambled state from cube
 }
 
 const formatTime = (ms: number) => {
@@ -43,7 +44,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory }: SolveAnalysisDialogProps) => {
+const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory, scrambledFacelets }: SolveAnalysisDialogProps) => {
 
     // Replay State
     const [replayIndex, setReplayIndex] = useState(0); // 0 = Scrambled state, N = After Nth step
@@ -96,21 +97,30 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
 
     // Compute Facelets for current index
     const currentFacelets = useMemo(() => {
-        let f = createSolvedCube();
+        let f: Facelets;
 
-        // 1. Apply Scramble
-        if (scramble) {
-            scramble.forEach(moveStr => {
-                const face = moveStr[0] as any;
-                const isPrime = moveStr.includes("'");
-                const isDouble = moveStr.includes("2");
-                const direction = isPrime ? -1 : 1;
+        // CRITICAL: Use captured scrambled facelets if available (most accurate)
+        // Otherwise fall back to reconstructing from solved + scramble
+        if (scrambledFacelets) {
+            f = [...scrambledFacelets] as Facelets;
+            console.log('[Replay] Using captured scrambled facelets from cube');
+        } else {
+            f = createSolvedCube();
+            // Apply Scramble
+            if (scramble) {
+                scramble.forEach(moveStr => {
+                    const face = moveStr[0] as CubeFace;
+                    const isPrime = moveStr.includes("'");
+                    const isDouble = moveStr.includes("2");
+                    const direction: 1 | -1 = isPrime ? -1 : 1;
 
-                f = applyMove(f, face, direction);
-                if (isDouble) {
-                    f = applyMove(f, face, direction); // Apply twice for 2
-                }
-            });
+                    f = applyMove(f, face, direction);
+                    if (isDouble) {
+                        f = applyMove(f, face, direction); // Apply twice for 2
+                    }
+                });
+            }
+            console.log('[Replay] Reconstructed scramble from notation');
         }
 
         // 2. Apply raw moves directly using face and direction (not notation)
@@ -140,6 +150,7 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
 
             console.log('[Replay] At end - Comparison:', {
                 scrambleReceived: scramble?.join(' '),
+                usingCapturedFacelets: !!scrambledFacelets,
                 totalDifferences: differences.length,
                 firstDiffs: differences.slice(0, 10),
                 isSolved: solved
@@ -153,11 +164,12 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
             totalRawMoves,
             percentComplete: totalRawMoves > 0 ? ((rawMoveCount / totalRawMoves) * 100).toFixed(1) + '%' : '0%',
             atEnd,
-            isSolved: solved
+            isSolved: solved,
+            usingCapturedFacelets: !!scrambledFacelets
         });
 
         return f;
-    }, [scramble, replayIndex, replaySteps, debugHistory]);
+    }, [scramble, scrambledFacelets, replayIndex, replaySteps, debugHistory]);
 
     // Current Orientation
     const currentOrientation = useMemo(() => {
