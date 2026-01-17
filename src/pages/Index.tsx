@@ -87,6 +87,8 @@ const CubeTracker = () => {
   const [analysisStats, setAnalysisStats] = useState<CFOPStats | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [solveHistory, setSolveHistory] = useState<MoveEvent[]>([]);
+  // Store actual scramble moves (from moveHistory) for accurate replay
+  const [scrambleMoves, setScrambleMoves] = useState<MoveEvent[]>([]);
 
   const solveMetaData = useRef({ index: 0, time: 0 });
   const solveScrambleRef = useRef<string[]>([]);
@@ -94,6 +96,8 @@ const CubeTracker = () => {
   // Store actual scrambled facelets state from the cube (not reconstructed)
   const scrambledFaceletsRef = useRef<Facelets | null>(null);
   const [scrambledFacelets, setScrambledFacelets] = useState<Facelets | null>(null);
+  // Store scramble moves ref for capture at timer start
+  const scrambleMovesRef = useRef<MoveEvent[]>([]);
   const [isRescueMode, setIsRescueMode] = useState(false);
   const [wrongMoves, setWrongMoves] = useState<string[]>([]);
   const lastProcessedMoveCount = useRef(0);
@@ -424,23 +428,27 @@ const CubeTracker = () => {
         if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
         setInspectionState('idle');
         if (activeState.lastMove) {
-          // CRITICAL: Capture index BEFORE the first solve move (length - 1)
-          // The current lastMove IS the first solve move, so we include it
+          // CRITICAL: The first solve move index
+          const firstSolveMoveIndex = activeState.moveHistory.length - 1;
+          
           solveMetaData.current = {
-            index: activeState.moveHistory.length - 1,
+            index: firstSolveMoveIndex,
             time: activeState.lastMove.timestamp
           };
-          // Capture the exact scramble used for this solve
+          // Capture the exact scramble used for this solve (notation)
           solveScrambleRef.current = [...scramble];
+          // CRITICAL: Capture the actual scramble moves from moveHistory
+          // These are the moves the user performed to follow the scramble
+          scrambleMovesRef.current = activeState.moveHistory.slice(0, firstSolveMoveIndex);
           // Use the facelets captured at inspection start (before any solve moves)
           scrambledFaceletsRef.current = faceletsAtInspectionStart.current;
           
           console.log('[Timer Start]', {
-            startIndex: activeState.moveHistory.length - 1,
+            firstSolveMoveIndex,
+            scrambleMovesCount: scrambleMovesRef.current.length,
             totalMoves: activeState.moveHistory.length,
             firstSolveMove: activeState.lastMove.notation,
-            scrambleCaptured: scramble.join(' '),
-            scrambledFaceletsCaptured: !!scrambledFaceletsRef.current
+            scrambleNotation: scramble.join(' ')
           });
           startTimer();
         }
@@ -451,38 +459,33 @@ const CubeTracker = () => {
   useEffect(() => {
     if (timerState === 'running' && isCubeSolved(activeState.facelets)) {
       stopTimer();
-      const history = activeState.moveHistory.slice(solveMetaData.current.index);
+      const solveHistory = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
-      // Use the captured scramble, not the current state
       const capturedScramble = solveScrambleRef.current;
-      // Use the captured scrambled facelets
-      const capturedFacelets = scrambledFaceletsRef.current;
+      const capturedScrambleMoves = scrambleMovesRef.current;
 
       // Debug: Log what we're capturing
       console.log('[Solve Detection]', {
         totalHistory: activeState.moveHistory.length,
         sliceFrom: solveMetaData.current.index,
-        solveHistory: history.length,
-        firstMove: history[0]?.notation,
-        lastMove: history[history.length - 1]?.notation,
-        cubeIsSolved: isCubeSolved(activeState.facelets),
-        scramble: capturedScramble.join(' '),
-        hasCapturedFacelets: !!capturedFacelets
+        solveHistoryLength: solveHistory.length,
+        scrambleMovesLength: capturedScrambleMoves.length,
+        firstSolveMove: solveHistory[0]?.notation,
+        lastSolveMove: solveHistory[solveHistory.length - 1]?.notation,
+        cubeIsSolved: true
       });
 
-      // Use actual facelets for analysis if available
-      const result = capturedFacelets 
-        ? analyzeSolve(capturedScramble, history, startTime, capturedFacelets)
-        : analyzeSolve(capturedScramble, history, startTime);
+      // Analyze using notation-based scramble (for CFOP detection)
+      const result = analyzeSolve(capturedScramble, solveHistory, startTime);
 
       // Safety Check for Result
       if (result && !isNaN(result.totalMoveCount)) {
         console.log("[Stats] Analysis Result:", result);
         setAnalysisStats(result);
-        setSolveHistory(history); // Store the solve moves for replay
-        setSolveScramble([...capturedScramble]); // Store scramble for dialog
-        setScrambledFacelets(capturedFacelets ? [...capturedFacelets] as Facelets : null);
-        // Small delay to allow render before opening to prevent potential race/crash?
+        setSolveHistory(solveHistory); // Store the solve moves for replay
+        setSolveScramble([...capturedScramble]); // Store scramble notation for dialog
+        setScrambleMoves([...capturedScrambleMoves]); // Store actual scramble moves for replay
+        // Small delay to allow render before opening
         requestAnimationFrame(() => setAnalysisOpen(true));
       } else {
         console.error("[Stats] Analysis returned invalid data", result);
@@ -803,7 +806,7 @@ const CubeTracker = () => {
         stats={analysisStats}
         scramble={solveScramble}
         debugHistory={solveHistory}
-        scrambledFacelets={scrambledFacelets}
+        scrambleMoves={scrambleMoves}
       />
     </div>
   );
