@@ -89,6 +89,8 @@ const CubeTracker = () => {
   const [solveHistory, setSolveHistory] = useState<MoveEvent[]>([]);
 
   const solveMetaData = useRef({ index: 0, time: 0 });
+  const solveScrambleRef = useRef<string[]>([]);
+  const [solveScramble, setSolveScramble] = useState<string[]>([]);
   const [isRescueMode, setIsRescueMode] = useState(false);
   const [wrongMoves, setWrongMoves] = useState<string[]>([]);
   const lastProcessedMoveCount = useRef(0);
@@ -409,15 +411,19 @@ const CubeTracker = () => {
         if (inspectionIntervalRef.current) clearInterval(inspectionIntervalRef.current);
         setInspectionState('idle');
         if (activeState.lastMove) {
-          // Set index to CURRENT length (next move will be the first solve move)
+          // CRITICAL: Capture index BEFORE the first solve move (length - 1)
+          // The current lastMove IS the first solve move, so we include it
           solveMetaData.current = {
-            index: activeState.moveHistory.length,
+            index: activeState.moveHistory.length - 1,
             time: activeState.lastMove.timestamp
           };
+          // Capture the exact scramble used for this solve
+          solveScrambleRef.current = [...scramble];
           console.log('[Timer Start]', {
-            startIndex: activeState.moveHistory.length,
+            startIndex: activeState.moveHistory.length - 1,
             totalMoves: activeState.moveHistory.length,
-            lastMoveBeforeStart: activeState.lastMove.notation
+            firstSolveMove: activeState.lastMove.notation,
+            scrambleCaptured: scramble.join(' ')
           });
           startTimer();
         }
@@ -430,24 +436,28 @@ const CubeTracker = () => {
       stopTimer();
       const history = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
+      // Use the captured scramble, not the current state
+      const capturedScramble = solveScrambleRef.current;
 
       // Debug: Log what we're capturing
       console.log('[Solve Detection]', {
         totalHistory: activeState.moveHistory.length,
         sliceFrom: solveMetaData.current.index,
         solveHistory: history.length,
+        firstMove: history[0]?.notation,
         lastMove: history[history.length - 1]?.notation,
         cubeIsSolved: isCubeSolved(activeState.facelets),
-        scramble: scramble.join(' ')
+        scramble: capturedScramble.join(' ')
       });
 
-      const result = analyzeSolve(scramble, history, startTime);
+      const result = analyzeSolve(capturedScramble, history, startTime);
 
       // Safety Check for Result
       if (result && !isNaN(result.totalMoveCount)) {
         console.log("[Stats] Analysis Result:", result);
         setAnalysisStats(result);
         setSolveHistory(history); // Store the solve moves for replay
+        setSolveScramble([...capturedScramble]); // Store scramble for dialog
         // Small delay to allow render before opening to prevent potential race/crash?
         requestAnimationFrame(() => setAnalysisOpen(true));
       } else {
@@ -455,7 +465,7 @@ const CubeTracker = () => {
         toast.error("Analysis failed: Invalid data");
       }
     }
-  }, [activeState.facelets, timerState, stopTimer, scramble, activeState.moveHistory]);
+  }, [activeState.facelets, timerState, stopTimer, activeState.moveHistory]);
 
   // Mark scramble as followed when user applies scramble manually
   const handleMarkScrambleFollowed = useCallback(() => {
@@ -767,7 +777,7 @@ const CubeTracker = () => {
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
         stats={analysisStats}
-        scramble={scramble}
+        scramble={solveScramble}
         debugHistory={solveHistory}
       />
     </div>
