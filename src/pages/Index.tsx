@@ -406,7 +406,7 @@ const CubeTracker = () => {
   const movesAtInspectionStart = useRef(0);
   // CRITICAL: Store facelets at the START of inspection (after scramble, before solving)
   const faceletsAtInspectionStart = useRef<Facelets | null>(null);
-  
+
   useEffect(() => {
     if (inspectionState === 'running' && movesAtInspectionStart.current === 0) {
       movesAtInspectionStart.current = activeState.moveCount;
@@ -430,7 +430,7 @@ const CubeTracker = () => {
         if (activeState.lastMove) {
           // CRITICAL: The first solve move index
           const firstSolveMoveIndex = activeState.moveHistory.length - 1;
-          
+
           solveMetaData.current = {
             index: firstSolveMoveIndex,
             time: activeState.lastMove.timestamp
@@ -442,7 +442,7 @@ const CubeTracker = () => {
           scrambleMovesRef.current = activeState.moveHistory.slice(0, firstSolveMoveIndex);
           // Use the facelets captured at inspection start (before any solve moves)
           scrambledFaceletsRef.current = faceletsAtInspectionStart.current;
-          
+
           console.log('[Timer Start]', {
             firstSolveMoveIndex,
             scrambleMovesCount: scrambleMovesRef.current.length,
@@ -475,22 +475,29 @@ const CubeTracker = () => {
         cubeIsSolved: true
       });
 
-      // Analyze using notation-based scramble (for CFOP detection)
-      const result = analyzeSolve(capturedScramble, solveHistory, startTime);
+      // 1. Show Toast immediately & Start Delay
+      toast.success("Solve Completed! 🎉");
 
-      // Safety Check for Result
-      if (result && !isNaN(result.totalMoveCount)) {
-        console.log("[Stats] Analysis Result:", result);
-        setAnalysisStats(result);
-        setSolveHistory(solveHistory); // Store the solve moves for replay
-        setSolveScramble([...capturedScramble]); // Store scramble notation for dialog
-        setScrambleMoves([...capturedScrambleMoves]); // Store actual scramble moves for replay
-        // Small delay to allow render before opening
-        requestAnimationFrame(() => setAnalysisOpen(true));
-      } else {
-        console.error("[Stats] Analysis returned invalid data", result);
-        toast.error("Analysis failed: Invalid data");
-      }
+      // 2. Queue Analysis & Dialog (Non-blocking)
+      setTimeout(() => {
+        // Analyze using notation-based scramble (for CFOP detection)
+        // We do this async so we don't block the final move animation
+        const result = analyzeSolve(capturedScramble, solveHistory, startTime);
+
+        if (result && !isNaN(result.totalMoveCount)) {
+          console.log("[Stats] Analysis Result:", result);
+          setAnalysisStats(result);
+          setSolveHistory(solveHistory);
+          setSolveScramble([...capturedScramble]);
+          setScrambleMoves([...capturedScrambleMoves]);
+
+          // Open dialog
+          setAnalysisOpen(true);
+        } else {
+          console.error("[Stats] Analysis returned invalid data", result);
+          toast.error("Analysis failed: Invalid data");
+        }
+      }, 5000); // 5 second delay before showing details
     }
   }, [activeState.facelets, timerState, stopTimer, activeState.moveHistory]);
 
@@ -605,6 +612,29 @@ const CubeTracker = () => {
                 </div>
               </div>
             )}
+
+            {/* DEBUG BUTTON */}
+            <div className="flex gap-2">
+              <Button onClick={() => {
+                // Simulate Timer Start
+                if (timerState === 'idle') {
+                  startTimer();
+                  solveMetaData.current = { index: 0, time: Date.now() };
+                  scrambleMovesRef.current = [];
+                  solveScrambleRef.current = []; // Empty scramble
+                }
+                // Simulate Solve after 100ms
+                setTimeout(() => {
+                  setIsDemoMode(true);
+                  setDemoState(prev => ({
+                    ...prev,
+                    facelets: createSolvedCube()
+                  }));
+                }, 500);
+              }} variant="outline" size="sm" className="w-full border-dashed opacity-50 hover:opacity-100">
+                🐛 Force Win v3
+              </Button>
+            </div>
           </div>
 
           {/* Bottom Section: Controls & Stats */}
