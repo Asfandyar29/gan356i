@@ -71,10 +71,10 @@ const About = () => {
 
                         <div className="space-y-4 text-lg leading-relaxed text-muted-foreground/90">
                             <p>
-                                Hi! 👋 I’m the developer behind this Bluetooth-enabled Rubik’s Cube tracking app — a project built from a genuine love for cubing, engineering, and intelligent problem-solving.
+                                Hi! 👋 I'm the developer behind this Bluetooth-enabled Rubik's Cube tracking app — a project built from a genuine love for cubing, engineering, and intelligent problem-solving.
                             </p>
                             <p>
-                                My enthusiasm for the Rubik’s Cube goes far beyond solving it quickly. What fascinates me most is the mathematics, spatial reasoning, and optimization hidden inside every solve.
+                                My enthusiasm for the Rubik's Cube goes far beyond solving it quickly. What fascinates me most is the mathematics, spatial reasoning, and optimization hidden inside every solve.
                             </p>
                         </div>
 
@@ -109,7 +109,36 @@ const About = () => {
                         </CardHeader>
                         <CardContent className="text-muted-foreground leading-relaxed text-lg">
                             <p>
-                                A standard 3×3 Rubik’s Cube has over <span className="text-primary font-bold">43 quintillion</span> possible combinations, yet every one of them can be solved in 20 moves or fewer. This idea — known as <strong>God’s Number</strong> — perfectly represents how structure, logic, and the right approach can tame overwhelming complexity. That philosophy heavily influenced how this app was designed.
+                                A standard 3×3 Rubik's Cube has over <span className="text-primary font-bold">43 quintillion</span> possible combinations, yet every one of them can be solved in 20 moves or fewer. This idea — known as <strong>God's Number</strong> — perfectly represents how structure, logic, and the right approach can tame overwhelming complexity. That philosophy heavily influenced how this app was designed.
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-sm shadow-xl md:col-span-2 bg-gradient-to-br from-orange-500/10 via-transparent to-blue-500/10">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-2xl">
+                                <span className="text-4xl">⏳</span> The Impossible Journey
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 text-muted-foreground leading-relaxed">
+                            <p className="text-lg">
+                                How long would it take to see <strong>every possible permutation</strong> of a Rubik's Cube?
+                            </p>
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                                    <p className="text-3xl font-bold text-primary mb-1">1.37 Trillion</p>
+                                    <p className="text-sm">Years at 1 position per second</p>
+                                </div>
+                                <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                                    <p className="text-3xl font-bold text-orange-400 mb-1">~100×</p>
+                                    <p className="text-sm">Longer than the age of the universe</p>
+                                </div>
+                            </div>
+                            <p>
+                                With exactly <span className="font-mono text-primary">43,252,003,274,489,856,000</span> distinct, reachable positions, even viewing 10 configurations per second would still take over <strong>137 billion years</strong>.
+                            </p>
+                            <p className="text-lg font-medium text-foreground italic border-l-4 border-orange-400 pl-4 py-1 bg-white/5 rounded-r-lg">
+                                If you placed one Rubik's Cube on Earth's surface for every permutation, you could cover the entire planet <span className="text-orange-400 font-bold">275 times</span>.
                             </p>
                         </CardContent>
                     </Card>
@@ -139,7 +168,7 @@ const About = () => {
                         </CardHeader>
                         <CardContent className="space-y-4 text-muted-foreground">
                             <p>
-                                I’m a Computer Systems Engineering graduate from <strong>UET Peshawar</strong>, with a solid foundation in software development, data analysis, and AI-driven systems.
+                                I'm a Computer Systems Engineering graduate from <strong>UET Peshawar</strong>, with a solid foundation in software development, data analysis, and AI-driven systems.
                             </p>
                             <ul className="space-y-2 text-sm">
                                 <li className="flex gap-2">
@@ -169,7 +198,7 @@ const About = () => {
                         </CardHeader>
                         <CardContent className="text-muted-foreground leading-relaxed relative z-10">
                             <p className="mb-4">
-                                This app is built for cubers who want more than basic stats. It’s for those who care about <em>how</em> they solve, not just how fast. By combining smart hardware, 3D motion tracking, and thoughtful engineering, the goal is to push cubing analytics to the next level.
+                                This app is built for cubers who want more than basic stats. It's for those who care about <em>how</em> they solve, not just how fast. By combining smart hardware, 3D motion tracking, and thoughtful engineering, the goal is to push cubing analytics to the next level.
                             </p>
                             <p className="text-lg font-medium text-foreground italic border-l-4 border-primary pl-4 py-1 bg-white/5 rounded-r-lg">
                                 "An engineer who loves understanding systems — especially the ones that twist, turn, and challenge the mind."
