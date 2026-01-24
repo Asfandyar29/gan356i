@@ -23,6 +23,7 @@ interface SolveAnalysisDialogProps {
     scramble: string[];
     debugHistory: MoveEvent[];
     scrambleMoves?: MoveEvent[]; // Actual scramble moves from moveHistory for accurate replay
+    videoUrl?: string | null;
 }
 
 const formatTime = (ms: number) => {
@@ -44,7 +45,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory, scrambleMoves }: SolveAnalysisDialogProps) => {
+const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory, scrambleMoves, videoUrl }: SolveAnalysisDialogProps) => {
 
     // Replay State
     const [replayIndex, setReplayIndex] = useState(0); // 0 = Scrambled state, N = After Nth step
@@ -100,7 +101,7 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
     const currentFacelets = useMemo(() => {
         // Always start from solved cube
         let f: Facelets = createSolvedCube();
-        
+
         // Apply actual scramble moves if available (most accurate)
         // These are the moves the user performed on the physical cube
         if (scrambleMoves && scrambleMoves.length > 0) {
@@ -177,6 +178,14 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
         return () => clearInterval(interval);
     }, [isPlaying, replaySteps.length, playbackSpeed]);
 
+    // Video State
+    const [showVideo, setShowVideo] = useState(!!videoUrl);
+
+    // Auto-switch to video if available
+    useEffect(() => {
+        if (videoUrl) setShowVideo(true);
+    }, [videoUrl]);
+
     if (!stats) return null;
 
     // Chart data
@@ -193,11 +202,33 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
             <DialogContent className="sm:max-w-md md:max-w-4xl bg-card border-border max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     {/* ... existing header ... */}
-                    <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                        <span>🎉 Solve Analysis</span>
-                        <span className="text-muted-foreground text-base font-normal">
-                            ({formatTime(totalTime)})
-                        </span>
+                    <DialogTitle className="text-2xl font-bold flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <span>🎉 Solve Analysis</span>
+                            <span className="text-muted-foreground text-base font-normal">
+                                ({formatTime(totalTime)})
+                            </span>
+                        </div>
+                        {videoUrl && (
+                            <div className="flex bg-muted rounded-lg p-1">
+                                <Button
+                                    size="sm"
+                                    variant={showVideo ? "default" : "ghost"}
+                                    onClick={() => setShowVideo(true)}
+                                    className="text-xs h-7 px-3"
+                                >
+                                    Video
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={!showVideo ? "default" : "ghost"}
+                                    onClick={() => setShowVideo(false)}
+                                    className="text-xs h-7 px-3"
+                                >
+                                    3D Replay
+                                </Button>
+                            </div>
+                        )}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -257,77 +288,97 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
                         </div>
                     </div>
 
-                    {/* Right Column: Replay */}
+                    {/* Right Column: Replay or Video */}
                     <div className="flex-1 md:max-w-[400px] flex flex-col gap-4">
-                        <div className="font-bold text-lg mb-2">Replay Solve</div>
-
-                        {/* 3D Cube Container */}
-                        <div className="aspect-square w-full rounded-2xl overflow-hidden bg-black/5 border border-white/5 relative">
-                            <RubiksCube3D
-                                facelets={currentFacelets}
-                                orientation={currentOrientation}
-                                axisConfig={{
-                                    xSource: 'x',
-                                    ySource: 'z',
-                                    zSource: 'y',
-                                    xInvert: true,
-                                    yInvert: false,
-                                    zInvert: true,
-                                    gyroEnabled: false,
-                                    offsetX: 0,
-                                    offsetY: 0,
-                                    offsetZ: 0,
-                                    offsetQuaternion: null,
-                                    quality: 'high',
-                                }}
-                                isError={false}
-                            />
-
-                            {/* Overlay Info */}
-                            <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md rounded-lg p-2 text-xs text-white font-mono pointer-events-none">
-                                <div>Move: {replayIndex} / {replaySteps.length}</div>
-                                <div className="text-xl font-bold text-primary mt-1">
-                                    {replayIndex > 0 ? replaySteps[replayIndex - 1].notation : 'Start'}
+                        {showVideo && videoUrl ? (
+                            <div className="flex flex-col gap-4">
+                                <div className="font-bold text-lg mb-2">Solve Recording <span className="text-xs font-normal text-muted-foreground">(Beta)</span></div>
+                                <div className="aspect-[3/4] w-full rounded-2xl overflow-hidden bg-black/5 border border-white/5 relative shadow-2xl">
+                                    <video
+                                        src={videoUrl}
+                                        controls
+                                        autoPlay
+                                        className="w-full h-full object-cover"
+                                        loop
+                                    />
+                                </div>
+                                <div className="text-xs text-muted-foreground text-center">
+                                    Recorded directly from the app
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <>
+                                <div className="font-bold text-lg mb-2">Replay Solve</div>
 
-                        {/* Controls */}
-                        <div className="flex flex-col gap-4 bg-muted/20 p-4 rounded-xl border border-border/50">
-                            <div className="flex items-center justify-between gap-2">
-                                <Button size="icon" variant="ghost" onClick={() => setReplayIndex(0)} title="Reset">
-                                    <RotateCcw className="w-4 h-4" />
-                                </Button>
-                                <Button size="icon" variant="ghost" onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))}>
-                                    <ChevronLeft className="w-5 h-5" />
-                                </Button>
-                                <Button size="icon" variant="default" className="rounded-full w-12 h-12" onClick={() => setIsPlaying(!isPlaying)}>
-                                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
-                                </Button>
-                                <Button size="icon" variant="ghost" onClick={() => setReplayIndex(Math.min(replaySteps.length, replayIndex + 1))}>
-                                    <ChevronRight className="w-5 h-5" />
-                                </Button>
-                                <Button size="icon" variant="ghost" onClick={() => { setIsPlaying(false); setReplayIndex(replaySteps.length); }} title="End">
-                                    <FastForward className="w-4 h-4" />
-                                </Button>
-                            </div>
+                                {/* 3D Cube Container */}
+                                <div className="aspect-square w-full rounded-2xl overflow-hidden bg-black/5 border border-white/5 relative">
+                                    <RubiksCube3D
+                                        facelets={currentFacelets}
+                                        orientation={currentOrientation}
+                                        axisConfig={{
+                                            xSource: 'x',
+                                            ySource: 'z',
+                                            zSource: 'y',
+                                            xInvert: true,
+                                            yInvert: false,
+                                            zInvert: true,
+                                            gyroEnabled: false,
+                                            offsetX: 0,
+                                            offsetY: 0,
+                                            offsetZ: 0,
+                                            offsetQuaternion: null,
+                                            quality: 'high',
+                                        }}
+                                        isError={false}
+                                    />
 
-                            <Slider
-                                value={[replayIndex]}
-                                max={replaySteps.length}
-                                step={1}
-                                onValueChange={(v) => { setIsPlaying(false); setReplayIndex(v[0]); }}
-                                className="w-full"
-                            />
+                                    {/* Overlay Info */}
+                                    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md rounded-lg p-2 text-xs text-white font-mono pointer-events-none">
+                                        <div>Move: {replayIndex} / {replaySteps.length}</div>
+                                        <div className="text-xl font-bold text-primary mt-1">
+                                            {replayIndex > 0 ? replaySteps[replayIndex - 1].notation : 'Start'}
+                                        </div>
+                                    </div>
+                                </div>
 
-                            <div className="text-center text-xs text-muted-foreground font-mono">
-                                {replaySteps.map((s, i) => (
-                                    <span key={i} className={`inline-block mx-0.5 px-1 rounded ${i === replayIndex - 1 ? 'bg-primary text-primary-foreground font-bold scale-110' : 'opacity-50'}`}>
-                                        {s.notation}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
+                                {/* Controls */}
+                                <div className="flex flex-col gap-4 bg-muted/20 p-4 rounded-xl border border-border/50">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <Button size="icon" variant="ghost" onClick={() => setReplayIndex(0)} title="Reset">
+                                            <RotateCcw className="w-4 h-4" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" onClick={() => setReplayIndex(Math.max(0, replayIndex - 1))}>
+                                            <ChevronLeft className="w-5 h-5" />
+                                        </Button>
+                                        <Button size="icon" variant="default" className="rounded-full w-12 h-12" onClick={() => setIsPlaying(!isPlaying)}>
+                                            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
+                                        </Button>
+                                        <Button size="icon" variant="ghost" onClick={() => setReplayIndex(Math.min(replaySteps.length, replayIndex + 1))}>
+                                            <ChevronRight className="w-5 h-5" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" onClick={() => { setIsPlaying(false); setReplayIndex(replaySteps.length); }} title="End">
+                                            <FastForward className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+
+                                    <Slider
+                                        value={[replayIndex]}
+                                        max={replaySteps.length}
+                                        step={1}
+                                        onValueChange={(v) => { setIsPlaying(false); setReplayIndex(v[0]); }}
+                                        className="w-full"
+                                    />
+
+                                    <div className="text-center text-xs text-muted-foreground font-mono">
+                                        {replaySteps.map((s, i) => (
+                                            <span key={i} className={`inline-block mx-0.5 px-1 rounded ${i === replayIndex - 1 ? 'bg-primary text-primary-foreground font-bold scale-110' : 'opacity-50'}`}>
+                                                {s.notation}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 

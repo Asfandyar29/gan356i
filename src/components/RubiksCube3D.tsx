@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState, useEffect, useCallback, Suspense } from 'react';
-import { Canvas, useFrame, useLoader } from '@react-three/fiber';
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, MeshReflectorMaterial, ContactShadows, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
@@ -645,7 +645,54 @@ interface RubiksCube3DProps {
   nextMove?: string | null;
   showReflections?: boolean;
   isError?: boolean;
+  recording?: boolean;
+  onRecordingComplete?: (blobUrl: string) => void;
 }
+
+// Recorder Component
+const CubeRecorder = ({ recording, onRecordingComplete }: { recording: boolean; onRecordingComplete?: (url: string) => void }) => {
+  const { gl } = useThree();
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    if (recording) {
+      chunksRef.current = [];
+      const canvas = gl.domElement;
+
+      try {
+        // Capture at 30 FPS
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, {
+          mimeType: 'video/webm;codecs=vp9'
+        });
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          if (onRecordingComplete) onRecordingComplete(url);
+        };
+
+        recorder.start();
+        mediaRecorderRef.current = recorder;
+      } catch (e) {
+        console.error("Failed to start recording:", e);
+      }
+    } else {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    }
+  }, [recording, gl]); // Re-run if recording state changes
+
+  return null;
+};
 
 const RubiksCube3D = ({
   facelets,
@@ -654,6 +701,8 @@ const RubiksCube3D = ({
   lastMove = null,
   nextMove = null,
   isError = false,
+  recording = false,
+  onRecordingComplete
 }: RubiksCube3DProps) => {
   const [webGLSupported, setWebGLSupported] = useState(true);
 
@@ -716,6 +765,7 @@ const RubiksCube3D = ({
             nextMove={nextMove}
             isError={isError}
           />
+          <CubeRecorder recording={!!recording} onRecordingComplete={onRecordingComplete} />
         </Float>
 
         {/* Contact Shadows for realism */}

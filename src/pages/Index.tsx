@@ -11,14 +11,15 @@ import CubeStats from '@/components/CubeStats';
 import RubiksCube3D from '@/components/RubiksCube3D';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from '@/components/AxisCalibration';
 import SolveAnalysisDialog from '@/components/SolveAnalysisDialog';
+
 import { analyzeSolve, CFOPStats } from '@/lib/cfop-analyzer';
+import { checkCrossD, checkCrossU, checkF2LD, checkF2LU, checkOLLD, checkOLLU, checkPLL } from '@/lib/cube-solver';
 import { toast } from 'sonner';
 import NavBar from '@/components/NavBar';
 import { getCubeSolution } from '@/lib/solver-service';
 import { applyMove as applyMoveLogic } from '@/lib/cube-solver';
 import { Play, FastForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
 
 const CubeTracker = () => {
   const {
@@ -106,22 +107,36 @@ const CubeTracker = () => {
   const activeState = isDemoMode ? demoState : cubeState;
   const isConnected = isDemoMode || connectionState === 'connected';
 
-  useEffect(() => {
-    if (!isDemoMode) return;
+  // Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
 
-    const interval = setInterval(() => {
-      setDemoState(prev => ({
-        ...prev,
-        orientation: {
-          x: Math.sin(Date.now() / 3000) * 15,
-          y: (Date.now() / 50) % 360,
-          z: Math.cos(Date.now() / 4000) * 10,
-        }
-      }));
-    }, 50);
+  // Real-time Analysis State
+  const [currentPhase, setCurrentPhase] = useState<'Cross' | 'F2L' | 'OLL' | 'PLL' | 'Solved'>('Cross');
+  const realTimeStats = useRef<Partial<CFOPStats>>({
+    cross: { timestamp: 0, duration: 0, moveCount: 0 },
+    f2l: { timestamp: 0, duration: 0, moveCount: 0 },
+    oll: { timestamp: 0, duration: 0, moveCount: 0 },
+    pll: { timestamp: 0, duration: 0, moveCount: 0 },
+    baseFace: null
+  });
 
-    return () => clearInterval(interval);
-  }, [isDemoMode]);
+  const handleRecordingComplete = useCallback((url: string) => {
+    console.log("Recording complete, url:", url);
+    setRecordedVideoUrl(url);
+  }, []);
+
+  const resetAnalysis = () => {
+    setCurrentPhase('Cross');
+    realTimeStats.current = {
+      cross: { timestamp: 0, duration: 0, moveCount: 0 },
+      f2l: { timestamp: 0, duration: 0, moveCount: 0 },
+      oll: { timestamp: 0, duration: 0, moveCount: 0 },
+      pll: { timestamp: 0, duration: 0, moveCount: 0 },
+      baseFace: null
+    };
+    setRecordedVideoUrl(null);
+  };
 
   // Generate new scramble
   const handleScramble = useCallback(() => {
@@ -141,7 +156,6 @@ const CubeTracker = () => {
       inspectionIntervalRef.current = null;
     }
   }, [resetTimer]);
-
   // Unpack scramble on generation for tracking
   const [flatScramble, setFlatScramble] = useState<string[]>([]);
   useEffect(() => {
@@ -443,6 +457,7 @@ const CubeTracker = () => {
           // Use the facelets captured at inspection start (before any solve moves)
           scrambledFaceletsRef.current = faceletsAtInspectionStart.current;
 
+          // ... existing logic ...
           console.log('[Timer Start]', {
             firstSolveMoveIndex,
             scrambleMovesCount: scrambleMovesRef.current.length,
@@ -450,15 +465,80 @@ const CubeTracker = () => {
             firstSolveMove: activeState.lastMove.notation,
             scrambleNotation: scramble.join(' ')
           });
+
+          // Reset Analysis & Start Recording
+          resetAnalysis();
+          setIsRecording(true);
           startTimer();
         }
       }
     }
   }, [activeState.moveCount, inspectionState, scrambleFollowed, timerState, startTimer, scramble]);
 
+  // Real-time Analysis Effect
+  useEffect(() => {
+    if (timerState === 'running' && activeState.lastMove) {
+      const moveEvent = activeState.lastMove;
+      const facelets = activeState.facelets; // Current state
+      const timestamp = moveEvent.timestamp;
+      const elapsed = timestamp - solveMetaData.current.time;
+      const moveCount = 1 + activeState.moveHistory.length - (solveMetaData.current.index + 1);
+
+      if (currentPhase === 'Cross') {
+        // Check Cross
+        if (checkCrossD(facelets)) {
+          realTimeStats.current.baseFace = 'D';
+          realTimeStats.current.cross = { timestamp, duration: elapsed, moveCount };
+          setCurrentPhase('F2L');
+          toast.success(`Cross Detected! (${(elapsed / 1000).toFixed(2)}s)`);
+        } else if (checkCrossU(facelets)) {
+          realTimeStats.current.baseFace = 'U';
+          realTimeStats.current.cross = { timestamp, duration: elapsed, moveCount };
+          setCurrentPhase('F2L');
+          toast.success(`Cross Detected! (${(elapsed / 1000).toFixed(2)}s)`);
+        }
+      } else if (currentPhase === 'F2L') {
+        // Check F2L
+        const isF2L = realTimeStats.current.baseFace === 'D' ? checkF2LD(facelets) : checkF2LU(facelets);
+        if (isF2L) {
+          const duration = timestamp - realTimeStats.current.cross!.timestamp;
+          const moves = moveCount - realTimeStats.current.cross!.moveCount;
+          realTimeStats.current.f2l = { timestamp, duration, moveCount: moves };
+          setCurrentPhase('OLL');
+          toast.success(`F2L Detected! (${(duration / 1000).toFixed(2)}s)`);
+        }
+      } else if (currentPhase === 'OLL') {
+        // Check OLL
+        const isOLL = realTimeStats.current.baseFace === 'D' ? checkOLLD(facelets) : checkOLLU(facelets);
+        if (isOLL) {
+          const duration = timestamp - realTimeStats.current.f2l!.timestamp;
+          const moves = moveCount - (realTimeStats.current.cross!.moveCount + realTimeStats.current.f2l!.moveCount);
+          realTimeStats.current.oll = { timestamp, duration, moveCount: moves };
+          setCurrentPhase('PLL');
+          toast.success(`OLL Detected! (${(duration / 1000).toFixed(2)}s)`);
+        }
+      } else if (currentPhase === 'PLL') {
+        // Check PLL (or solved, but solved is handled by main effect)
+        // If purely PLL check passes but not solved?
+        if (checkPLL(facelets)) {
+          const duration = timestamp - realTimeStats.current.oll!.timestamp;
+          const moves = moveCount - (realTimeStats.current.cross!.moveCount + realTimeStats.current.f2l!.moveCount + realTimeStats.current.oll!.moveCount);
+          realTimeStats.current.pll = { timestamp, duration, moveCount: moves };
+          setCurrentPhase('Solved');
+          // toast.success(`PLL Detected! (${(duration/1000).toFixed(2)}s)`);
+        }
+      }
+    }
+  }, [activeState.moveCount, timerState, currentPhase, activeState.facelets, activeState.lastMove, activeState.moveHistory.length]);
+
   useEffect(() => {
     if (timerState === 'running' && isCubeSolved(activeState.facelets)) {
       stopTimer();
+      // Delay stopping recording to capture the solved state
+      setTimeout(() => {
+        setIsRecording(false);
+      }, 1000);
+
       const solveHistory = activeState.moveHistory.slice(solveMetaData.current.index);
       const startTime = solveMetaData.current.time;
       const capturedScramble = solveScrambleRef.current;
@@ -480,24 +560,52 @@ const CubeTracker = () => {
 
       // 2. Queue Analysis & Dialog (Non-blocking)
       setTimeout(() => {
-        // Analyze using notation-based scramble (for CFOP detection)
-        // We do this async so we don't block the final move animation
-        const result = analyzeSolve(capturedScramble, solveHistory, startTime);
+        // Use real-time stats if we have them, otherwise fallback to analyzeSolve?
+        // Actually, let's use the real-time stats we captured + the video
 
-        if (result && !isNaN(result.totalMoveCount)) {
-          console.log("[Stats] Analysis Result:", result);
-          setAnalysisStats(result);
+        // Finalize real-time stats (fill in PLL if checked)
+        // If we just finished, PLL is done NOW.
+        const now = Date.now(); // or last move timestamp
+        const finalTimestamp = solveHistory[solveHistory.length - 1]?.timestamp || now;
+
+        if (currentPhase === 'PLL' || currentPhase === 'OLL' || currentPhase === 'F2L' || currentPhase === 'Cross') {
+          // Whatever phase we were in, we finished it just now
+          // Logic is tricky if steps skipped. 
+          // But if isCubeSolved is true, PLL is definitely done.
+          if (!realTimeStats.current.pll?.timestamp) {
+            // Force complete PLL
+            realTimeStats.current.pll = {
+              timestamp: finalTimestamp,
+              duration: finalTimestamp - (realTimeStats.current.oll?.timestamp || realTimeStats.current.f2l?.timestamp || realTimeStats.current.cross?.timestamp || startTime),
+              moveCount: solveHistory.length - (realTimeStats.current.cross?.moveCount || 0) // rough approx if others missing
+            };
+          }
+        }
+
+        // Create a stats object from our real-time capture
+        // We still run analyzeSolve just to double check or get better move counts if our real-time logic missed something
+        // But we really want the VIDEO URL to be passed.
+
+        const fallbackResult = analyzeSolve(capturedScramble, solveHistory, startTime);
+
+        // Merge or use fallback?
+        // Let's use fallback for robustness for now, but pass the video URL too.
+        // And maybe override with real-time timestamps if they exist?
+
+        if (fallbackResult && !isNaN(fallbackResult.totalMoveCount)) {
+          console.log("[Stats] Analysis Result:", fallbackResult);
+          setAnalysisStats(fallbackResult);
           setSolveHistory(solveHistory);
           setSolveScramble([...capturedScramble]);
           setScrambleMoves([...capturedScrambleMoves]);
 
-          // Open dialog
+          // Open dialog to show video
           setAnalysisOpen(true);
         } else {
-          console.error("[Stats] Analysis returned invalid data", result);
+          console.error("[Stats] Analysis returned invalid data", fallbackResult);
           toast.error("Analysis failed: Invalid data");
         }
-      }, 5000); // 5 second delay before showing details
+      }, 2000); // Reduced delay since we are recording
     }
   }, [activeState.facelets, timerState, stopTimer, activeState.moveHistory]);
 
@@ -719,6 +827,8 @@ const CubeTracker = () => {
                     })()
                   }
                   isError={wrongMoves.length > 0}
+                  recording={isRecording}
+                  onRecordingComplete={handleRecordingComplete}
                 />
               </div>
             </Suspense>
@@ -834,9 +944,10 @@ const CubeTracker = () => {
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
         stats={analysisStats}
-        scramble={solveScramble}
+        scramble={solveScrambleRef.current} // Use ref directly to be sure
         debugHistory={solveHistory}
         scrambleMoves={scrambleMoves}
+        videoUrl={recordedVideoUrl}
       />
     </div>
   );
