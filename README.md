@@ -1,5 +1,7 @@
 # Welcome to GAN356 i3 Smart Cube Webapp Project
 
+# To Access the Webapp in browser, open the link:- https://gan356.netlify.app/
+
 ## Project info
 
 ## How can I edit this code?
