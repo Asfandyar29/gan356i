@@ -1,9 +1,9 @@
 /* Timer font - monospace for consistent digit width */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 
 /* GAN Cube Tracker - Dark Minimal Design System */
 
@@ -76,15 +76,11 @@
     --sidebar-border: 220 15% 20%;
     --sidebar-ring: 215 90% 55%;
   }
-
-  .dark {
-    /* Already dark by default */
-  }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   html {
@@ -92,7 +88,10 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     background: var(--gradient-background);
     min-height: 100vh;
   }
@@ -101,7 +100,9 @@
 /* Custom utility classes */
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
     background-image: var(--gradient-primary);
   }
 
@@ -114,7 +115,10 @@
   }
 
   .glass-surface {
-    @apply backdrop-blur-xl bg-white/5 border border-white/10;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    background-color: rgb(255 255 255 / 0.05);
+    border: 1px solid rgb(255 255 255 / 0.1);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 }
