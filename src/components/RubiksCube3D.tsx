@@ -1,10 +1,24 @@
-import { useRef, useMemo, useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useRef, useMemo, useState, useEffect, useCallback, Suspense } from 'react';
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, MeshReflectorMaterial, ContactShadows, Environment, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { Facelets, CubeColor, CubeOrientation, MoveEvent } from '@/types/cube';
 import AxisCalibration, { AxisConfig, loadAxisConfig } from './AxisCalibration';
 import { applyMove } from '@/lib/cube-solver';
+
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 
 // Scramble Arrow Component
 const ScrambleArrow = ({ move, isError = false }: { move: string; isError?: boolean }) => {
@@ -752,9 +766,13 @@ const RubiksCube3D = ({
         <pointLight position={[10, 5, -5]} intensity={0.4} color="#ffffff" />
 
         {/* Environment for reflections and IBL */}
-        <Suspense fallback={null}>
-          <Environment preset="city" background={false} />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            {typeof navigator !== 'undefined' && navigator.onLine && (
+              <Environment preset="city" background={false} />
+            )}
+          </Suspense>
+        </ErrorBoundary>
 
         <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
           <CubeGroup

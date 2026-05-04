@@ -203,6 +203,11 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
     // If this is a fallback call, we need to ask the user for the MAC address
     if (isFallbackCall) {
+      // In native Android (Capacitor BLE), device.id is often the MAC address directly!
+      if (device.id && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(device.id.toUpperCase())) {
+        return device.id.toUpperCase();
+      }
+
       setPendingDeviceName(device.name || 'GAN Cube');
       setNeedsMacAddress(true);
 
@@ -239,9 +244,10 @@ export const useCubeConnection = (): UseCubeConnectionReturn => {
 
   // Connect to the cube
   const connect = useCallback(async (providedMac?: string) => {
-    if (!navigator.bluetooth) {
-      setError('Web Bluetooth is not supported. Please use Chrome, Edge, or Opera.');
-      return;
+    // We intentionally bypass the navigator.bluetooth check here because the Capacitor shim
+    // might be installed but delayed, or we want the actual TypeError to bubble up so we can see it.
+    if (!navigator.bluetooth && typeof window !== 'undefined' && !('bluetooth' in navigator)) {
+       console.warn('navigator.bluetooth is currently missing. Proceeding anyway to see if it throws.');
     }
 
     // If MAC is provided directly, save it
