@@ -14,13 +14,13 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
   }
 
   return (
-    <div className="w-full relative py-2">
-      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-3 text-center">
+    <div className="w-full relative py-1 md:py-2">
+      <div className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-1.5 md:mb-3 text-center">
         {title}
       </div>
-      <div className="flex flex-wrap gap-1.5 justify-center items-center">
+      <div className="flex flex-wrap gap-1 md:gap-1.5 justify-center items-center">
         {scramble.map((move, index) => {
-          let className = "text-sm md:text-base font-black px-2 py-1 transition-all duration-300 min-w-[2.2rem] text-center rounded-lg cursor-pointer select-none hover:scale-110 active:scale-95";
+          let className = "text-[11px] md:text-base font-black px-1.5 md:px-2 py-0.5 md:py-1 transition-all duration-300 min-w-[1.6rem] md:min-w-[2.2rem] text-center rounded-md md:rounded-lg cursor-pointer select-none hover:scale-110 active:scale-95";
 
           if (index < currentIndex) {
             className += " text-white/10 line-through decoration-white/20";
@@ -44,7 +44,7 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
         })}
       </div>
 
-      <div className="mt-4 text-center text-[8px] font-black uppercase tracking-[0.2em]">
+      <div className="mt-2 md:mt-4 text-center text-[7px] md:text-[8px] font-black uppercase tracking-[0.2em]">
         {currentIndex === scramble.length ? (
           <span className="text-success flex items-center justify-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
@@ -53,7 +53,7 @@ const ScrambleDisplay = ({ scramble, currentIndex = 0, lastMoveCorrect = null, t
         ) : lastMoveCorrect === false ? (
           <span className="text-destructive tracking-widest">INCORRECT MOVE</span>
         ) : (
-          <span className="text-white/20">Click to apply (Demo) or Follow sequence</span>
+          <span className="text-white/20 hidden md:inline">Click to apply (Demo) or Follow sequence</span>
         )}
       </div>
     </div>
