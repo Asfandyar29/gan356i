@@ -5,11 +5,11 @@ interface TimerDisplayProps {
 
 const TimerDisplay = ({ time, isRunning }: TimerDisplayProps) => {
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-1 md:gap-3">
       <div
         className={`
-          timer-display text-5xl md:text-7xl font-extrabold tracking-tighter
-          transition-all duration-500 transform
+          timer-display text-3xl md:text-7xl font-extrabold tracking-tighter
+          transition-all duration-500 transform leading-none
           ${isRunning
             ? 'text-primary scale-105 drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]'
             : 'text-foreground/90'
@@ -19,7 +19,7 @@ const TimerDisplay = ({ time, isRunning }: TimerDisplayProps) => {
         {time}
       </div>
       <div className={`
-        text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300
+        text-[9px] md:text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300
         ${isRunning ? 'text-primary animate-pulse' : 'text-muted-foreground/60'}
       `}>
         {isRunning ? 'Current Solve' : 'Last Result'}

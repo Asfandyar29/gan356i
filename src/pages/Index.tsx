@@ -702,7 +702,7 @@ const CubeTracker = () => {
               />
             </header>
 
-            <div className="glass-surface rounded-3xl p-4 md:p-6 border border-white/5 shadow-xl flex items-center justify-center backdrop-blur-xl" style={{ animationDelay: '100ms' }}>
+            <div className="glass-surface rounded-2xl md:rounded-3xl px-3 py-2 md:p-6 border border-white/5 shadow-xl flex items-center justify-center backdrop-blur-xl" style={{ animationDelay: '100ms' }}>
               <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
             </div>
 
@@ -721,8 +721,8 @@ const CubeTracker = () => {
               </div>
             )}
 
-            {/* DEBUG BUTTON */}
-            <div className="flex gap-2">
+            {/* DEBUG BUTTON - hidden on mobile to free up cube view */}
+            <div className="hidden md:flex gap-2">
               <Button onClick={() => {
                 // Simulate Timer Start
                 if (timerState === 'idle') {
@@ -882,7 +882,7 @@ const CubeTracker = () => {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <div className={`w-full max-w-2xl px-12 relative ${isRescueMode ? 'mt-24' : ''}`}>
+                          <div className={`w-full max-w-2xl px-8 md:px-12 relative bg-black/60 md:bg-transparent backdrop-blur-md md:backdrop-blur-0 rounded-2xl md:rounded-none py-2 md:py-0 border border-white/5 md:border-0 ${isRescueMode ? 'mt-24' : ''}`}>
                             <ScrambleDisplay
                               scramble={scramble}
                               currentIndex={displayScrambleIndex}
