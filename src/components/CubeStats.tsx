@@ -49,7 +49,7 @@ const CubeStats = ({ cubeState }: CubeStatsProps) => {
           <span>Angle</span>
         </div>
         <div className="flex flex-col md:grid md:grid-cols-3 gap-0.5 md:gap-x-3 w-full">
-          <div className="flex justify-between md:flex-col items-center w-full px-1 md:px-0">
+          <div className="hidden md:flex justify-between md:flex-col items-center w-full px-1 md:px-0">
             <span className="text-[6px] text-muted-foreground/30 font-black uppercase mr-1 md:mr-0 md:mb-0.5">X</span>
             <span className="text-[8px] md:text-[9px] font-black text-cube-red/90 tabular-nums leading-none">{orientation.x.toFixed(0)}°</span>
           </div>
