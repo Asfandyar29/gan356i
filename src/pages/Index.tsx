@@ -882,7 +882,7 @@ const CubeTracker = () => {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <div className={`w-full max-w-2xl px-12 relative ${isRescueMode ? 'mt-24' : ''}`}>
+                          <div className={`w-full max-w-2xl px-8 md:px-12 relative bg-black/60 md:bg-transparent backdrop-blur-md md:backdrop-blur-0 rounded-2xl md:rounded-none py-2 md:py-0 border border-white/5 md:border-0 ${isRescueMode ? 'mt-24' : ''}`}>
                             <ScrambleDisplay
                               scramble={scramble}
                               currentIndex={displayScrambleIndex}
