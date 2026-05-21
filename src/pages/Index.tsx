@@ -702,7 +702,7 @@ const CubeTracker = () => {
               />
             </header>
 
-            <div className="glass-surface rounded-3xl p-4 md:p-6 border border-white/5 shadow-xl flex items-center justify-center backdrop-blur-xl" style={{ animationDelay: '100ms' }}>
+            <div className="glass-surface rounded-2xl md:rounded-3xl px-3 py-2 md:p-6 border border-white/5 shadow-xl flex items-center justify-center backdrop-blur-xl" style={{ animationDelay: '100ms' }}>
               <TimerDisplay time={formattedTime} isRunning={timerState === 'running'} />
             </div>
 
