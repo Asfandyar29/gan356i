@@ -5,7 +5,7 @@ interface TimerDisplayProps {
 
 const TimerDisplay = ({ time, isRunning }: TimerDisplayProps) => {
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-1 md:gap-3">
       <div
         className={`
           timer-display text-3xl md:text-7xl font-extrabold tracking-tighter
