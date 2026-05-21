@@ -721,8 +721,8 @@ const CubeTracker = () => {
               </div>
             )}
 
-            {/* DEBUG BUTTON */}
-            <div className="flex gap-2">
+            {/* DEBUG BUTTON - hidden on mobile to free up cube view */}
+            <div className="hidden md:flex gap-2">
               <Button onClick={() => {
                 // Simulate Timer Start
                 if (timerState === 'idle') {
