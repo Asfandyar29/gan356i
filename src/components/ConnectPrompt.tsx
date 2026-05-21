@@ -257,6 +257,30 @@ const ConnectPrompt = ({
           </div>
         </div>
 
+        {/* Introduction Video */}
+        <div className="space-y-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 flex items-center justify-center gap-2">
+            <Play className="w-3 h-3" />
+            Watch Introduction
+          </div>
+          <div className="glass-surface p-2 rounded-3xl border border-white/5 shadow-2xl relative group">
+            <div className="absolute inset-0 bg-primary/5 blur-xl -z-10 group-hover:bg-primary/10 transition-colors" />
+            <div className="aspect-video w-full rounded-2xl overflow-hidden">
+              <iframe 
+                width="100%" 
+                height="100%" 
+                src="https://www.youtube.com/embed/CvW_teaDxsQ?modestbranding=1&rel=0" 
+                title="GAN Cube Tracker Introduction" 
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+                className="w-full h-full"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+
         {/* Footer Info */}
         <div className="space-y-6 pt-4">
           {error && (
