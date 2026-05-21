@@ -163,7 +163,7 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
 
     // Playback Loop
     useEffect(() => {
-        let interval: ReturnType<typeof window.setInterval> | undefined;
+        let interval: number | undefined;
         if (isPlaying) {
             interval = window.setInterval(() => {
                 setReplayIndex(prev => {
