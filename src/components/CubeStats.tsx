@@ -48,26 +48,33 @@ const CubeStats = ({ cubeState }: CubeStatsProps) => {
           <Zap className="w-2 h-2 hidden md:block" />
           <span>Angle</span>
         </div>
-        <div className="flex flex-col md:grid md:grid-cols-3 gap-0.5 md:gap-x-3 w-full">
-          <div className="hidden md:flex justify-between md:flex-col items-center w-full px-1 md:px-0">
+        <div className="hidden md:grid md:grid-cols-3 gap-x-3 w-full">
+          <div className="flex flex-col items-center w-full px-0">
             <span className="text-[6px] text-muted-foreground/30 font-black uppercase mr-1 md:mr-0 md:mb-0.5">X</span>
             <span className="text-[8px] md:text-[9px] font-black text-cube-red/90 tabular-nums leading-none">{orientation.x.toFixed(0)}°</span>
           </div>
-          <div className="flex justify-between md:flex-col items-center w-full px-1 md:px-0 hidden md:flex">
+          <div className="flex flex-col items-center w-full px-0">
             <span className="text-[6px] text-muted-foreground/30 font-black uppercase mr-1 md:mr-0 md:mb-0.5">Y</span>
             <span className="text-[8px] md:text-[9px] font-black text-cube-green/90 tabular-nums leading-none">{orientation.y.toFixed(0)}°</span>
           </div>
-          {/* On mobile only show X/Y/Z stacked or just X/Y? 
-              Let's show all 3 in a flex row? 
-              Actually flex-col space is tight.
-              Let's do a flex row with tiny text.
-          */}
+          <div className="flex flex-col items-center w-full px-0">
+            <span className="text-[6px] text-muted-foreground/30 font-black uppercase mr-1 md:mr-0 md:mb-0.5">Z</span>
+            <span className="text-[8px] md:text-[9px] font-black text-cube-blue/90 tabular-nums leading-none">{orientation.z.toFixed(0)}°</span>
+          </div>
         </div>
-        {/* Mobile Orientation Replacement: Row of 3 values */}
-        <div className="flex md:hidden justify-between w-full px-1 gap-1">
-          <span className="text-[8px] font-black text-cube-red/90">{orientation.x.toFixed(0)}°</span>
-          <span className="text-[8px] font-black text-cube-green/90">{orientation.y.toFixed(0)}°</span>
-          <span className="text-[8px] font-black text-cube-blue/90">{orientation.z.toFixed(0)}°</span>
+        <div className="grid md:hidden grid-cols-3 w-full px-1 gap-1">
+          <div className="flex flex-col-reverse items-center gap-0.5 min-w-0">
+            <span className="text-[6px] text-muted-foreground/60 font-black uppercase leading-none">X</span>
+            <span className="text-[8px] font-black text-cube-red/90 tabular-nums leading-none">{orientation.x.toFixed(0)}°</span>
+          </div>
+          <div className="flex flex-col-reverse items-center gap-0.5 min-w-0">
+            <span className="text-[6px] text-muted-foreground/60 font-black uppercase leading-none">Y</span>
+            <span className="text-[8px] font-black text-cube-green/90 tabular-nums leading-none">{orientation.y.toFixed(0)}°</span>
+          </div>
+          <div className="flex flex-col-reverse items-center gap-0.5 min-w-0">
+            <span className="text-[6px] text-muted-foreground/60 font-black uppercase leading-none">Z</span>
+            <span className="text-[8px] font-black text-cube-blue/90 tabular-nums leading-none">{orientation.z.toFixed(0)}°</span>
+          </div>
         </div>
       </div>
     </div>
