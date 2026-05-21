@@ -163,9 +163,9 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
 
     // Playback Loop
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let interval: number | undefined;
         if (isPlaying) {
-            interval = setInterval(() => {
+            interval = window.setInterval(() => {
                 setReplayIndex(prev => {
                     if (prev >= replaySteps.length) {
                         setIsPlaying(false);
@@ -175,7 +175,11 @@ const SolveAnalysisDialog = ({ open, onOpenChange, stats, scramble, debugHistory
                 });
             }, playbackSpeed);
         }
-        return () => clearInterval(interval);
+        return () => {
+            if (interval !== undefined) {
+                window.clearInterval(interval);
+            }
+        };
     }, [isPlaying, replaySteps.length, playbackSpeed]);
 
     // Video State
